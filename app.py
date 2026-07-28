@@ -333,7 +333,7 @@ for msg in current_chat["messages"]:
         with st.chat_message("user", avatar="👤"):
             st.markdown(msg["content"])
     else:
-        with st.chat_message("assistant", avatar="✦"):
+        with st.chat_message("assistant", avatar="🤖"):
             st.markdown(msg["content"])
             
             # Document Sources Pill Tags
@@ -359,7 +359,7 @@ if user_input:
     st.chat_message("user", avatar="👤").markdown(user_input)
     current_chat["messages"].append({"role": "user", "content": user_input})
 
-    with st.chat_message("assistant", avatar="✦"):
+    with st.chat_message("assistant", avatar="🤖"):
         with st.spinner(""):
             try:
                 response = query_engine.query(user_input)
