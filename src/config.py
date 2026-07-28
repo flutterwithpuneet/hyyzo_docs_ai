@@ -17,7 +17,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
 # Model names
 LLM_MODEL = os.getenv("LLM_MODEL", "models/gemini-2.0-flash")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/text-embedding-004")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 
 # Document settings
 DOCS_DIR = PROJECT_ROOT / os.getenv("DOCS_DIR", "docs")
