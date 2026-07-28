@@ -5,6 +5,7 @@ Run: py main.py
 
 import sys
 import os
+import time
 
 # Fix Windows console encoding
 if sys.platform == "win32":
@@ -52,18 +53,32 @@ def main():
             print("Bye!")
             break
 
-        response = engine.query(question)
+        try:
+            response = engine.query(question)
+            print(f"\nBot: {response}\n")
 
-        print(f"\nBot: {response}\n")
+            # Show sources
+            if response.source_nodes:
+                print("Sources:")
+                for node in response.source_nodes:
+                    filename = node.metadata.get("file_name", "unknown")
+                    score = f"{node.score:.2f}" if node.score else "N/A"
+                    print(f"   - {filename} (score: {score})")
+                print()
 
-        # Show sources
-        if response.source_nodes:
-            print("Sources:")
-            for node in response.source_nodes:
-                filename = node.metadata.get("file_name", "unknown")
-                score = f"{node.score:.2f}" if node.score else "N/A"
-                print(f"   - {filename} (score: {score})")
-            print()
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower():
+                print("\n[RATE LIMIT] Gemini free tier quota hit. Waiting 60s...\n")
+                time.sleep(60)
+                print("Retrying...")
+                try:
+                    response = engine.query(question)
+                    print(f"\nBot: {response}\n")
+                except Exception as e2:
+                    print(f"\n[ERROR] {e2}\n")
+            else:
+                print(f"\n[ERROR] {e}\n")
 
 
 if __name__ == "__main__":
