@@ -1,32 +1,8 @@
-# ============================================================
 # hyyzo_docs_ai - Requirements
 # Python 3.13+
-# ============================================================
 
-# --- Core RAG Framework ---
-llama-index-core==0.12.5
-llama-index-readers-file==0.4.7
-llama-index-embeddings-huggingface==0.5.2
-llama-index-llms-openai==0.3.42
-
-# --- Embeddings & ML ---
-sentence-transformers>=3.4.0
-torch>=2.6.0
-
-# --- Document Processing ---
-markdown>=3.7
-
-# --- Configuration ---
-python-dotenv>=1.1.0
-pydantic>=2.11.0
-pydantic-settings>=2.9.0
-
-# --- Logging & Utilities ---
-rich>=14.0.0
-
-# --- Testing ---
-pytest>=8.4.0
-pytest-cov>=6.1.0
-
-# --- Future: PDF Support ---
-# pypdf>=5.0.0
+llama-index-core
+llama-index-readers-file
+llama-index-llms-gemini
+llama-index-embeddings-gemini
+python-dotenv

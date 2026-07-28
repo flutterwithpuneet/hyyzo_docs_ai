@@ -1,52 +1,19 @@
-# ============================================================
-# .gitignore - hyyzo_docs_ai
-# ============================================================
-
-# --- Python ---
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-*.whl
-
-# --- Virtual Environment ---
 venv/
 .venv/
-env/
-ENV/
 
-# --- Environment Variables ---
+# Environment
 .env
 
-# --- IDE ---
+# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# --- OS ---
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# --- Data & Index ---
-data/processed/embeddings/
-data/raw/
-
-# --- Logs ---
-logs/*.log
-
-# --- Testing ---
-.pytest_cache/
-htmlcov/
-.coverage
-coverage.xml
-
-# --- Misc ---
-*.bak
-*.tmp
+# Index storage
+storage/

@@ -1,159 +1,71 @@
 # 🤖 Hyyzo Docs AI
 
-> A production-ready, document-based AI knowledge assistant powered by **LlamaIndex** and **Retrieval Augmented Generation (RAG)**.
+Document-based AI assistant powered by **LlamaIndex + Gemini RAG**.
 
-Hyyzo Docs AI reads your knowledge base (Markdown, text, and PDF files), creates semantic embeddings, builds a persistent vector index, and answers user questions **grounded exclusively in your documents** — with source references.
-
----
-
-## ✨ Features
-
-- **Multi-format ingestion** — `.md`, `.txt` (`.pdf` coming soon).
-- **Local embeddings** — runs offline using HuggingFace sentence-transformers.
-- **Persistent vector index** — build once, query instantly.
-- **Source-referenced answers** — every response cites the originating document.
-- **Configurable** — environment variables for all tunables.
-- **Production logging** — structured console + file logging.
-- **Modular architecture** — loader → embedder → index → chat engine.
+Reads your Markdown/text knowledge files, creates embeddings, and answers questions based only on your documents.
 
 ---
 
-## 📂 Project Structure
+## 📂 Structure
 
 ```
 hyyzo_docs_ai/
-│
-├── README.md
-├── .gitignore
-├── requirements.txt
 ├── .env.example
-│
-├── data/
-│   ├── raw/                    # Uploaded raw files
-│   │   ├── documents/
-│   │   ├── markdown/
-│   │   └── text/
-│   └── processed/
-│       └── embeddings/         # Persisted vector index
-│
-├── docs/                       # Knowledge documents (your content)
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── docs/              ← Your knowledge documents
 │   ├── about_hyyzo.md
 │   ├── products.md
 │   ├── features.md
 │   ├── faq.md
 │   ├── support.md
 │   └── glossary.md
-│
-├── src/
-│   ├── config.py               # Settings & logging
-│   ├── loaders/
-│   │   └── document_loader.py  # File ingestion
-│   ├── embeddings/
-│   │   └── embedding_model.py  # Embedding pipeline
-│   ├── index/
-│   │   └── vector_index.py     # Vector store management
-│   └── chatbot/
-│       └── chat_engine.py      # Query & chat interface
-│
-├── tests/
-│   └── test_index.py
-│
-└── logs/                       # Application logs
+└── src/
+    └── config.py      ← Configuration
 ```
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python **3.13+**
-- (Optional) OpenAI API key — only needed for LLM-powered answers
-
-### 1. Clone & enter the project
+## 🚀 Setup
 
 ```bash
-git clone <repo-url>
-cd hyyzo_docs_ai
-```
-
-### 2. Create a virtual environment
-
-```bash
-python -m venv venv
-# Windows
+# 1. Create venv
+py -m venv venv
 venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-```
 
-### 3. Install dependencies
-
-```bash
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-### 4. Configure environment
+# 3. Configure
+copy .env.example .env
+# Edit .env → add your GOOGLE_API_KEY
 
-```bash
-cp .env.example .env
-# Edit .env and set your OPENAI_API_KEY (if using OpenAI)
-```
-
-### 5. Add your documents
-
-Place `.md` and `.txt` files in the `docs/` directory. Sample documents are included.
-
-### 6. Run the assistant
-
-```bash
-python -m src.chatbot.chat_engine
+# 4. Run (coming in next phases)
+py main.py
 ```
 
 ---
 
-## ⚙️ Configuration
+## 📦 Dependencies
 
-All settings are managed via environment variables (`.env` file). See [`.env.example`](.env.example) for the full list.
-
-| Variable               | Default                                      | Description                         |
-|------------------------|----------------------------------------------|-------------------------------------|
-| `OPENAI_API_KEY`       | —                                            | OpenAI API key (optional)           |
-| `EMBEDDING_MODEL_NAME` | `sentence-transformers/all-MiniLM-L6-v2`     | HuggingFace embedding model         |
-| `EMBEDDING_DIMENSION`  | `384`                                        | Vector dimension                    |
-| `LLM_MODEL_NAME`       | `gpt-4o-mini`                                | LLM for answer generation           |
-| `LLM_TEMPERATURE`      | `0.1`                                        | Sampling temperature                |
-| `LLM_MAX_TOKENS`       | `1024`                                       | Max response tokens                 |
-| `DOCS_DIRECTORY`       | `docs`                                       | Path to knowledge documents         |
-| `CHUNK_SIZE`           | `512`                                        | Tokens per chunk                    |
-| `CHUNK_OVERLAP`        | `64`                                         | Overlap between chunks              |
-| `INDEX_PERSIST_DIR`    | `data/processed/embeddings`                  | Vector index storage path           |
-| `LOG_LEVEL`            | `INFO`                                       | Logging verbosity                   |
+| Package | Purpose |
+|---------|---------|
+| `llama-index-core` | RAG engine, index, query |
+| `llama-index-readers-file` | Read .md/.txt files |
+| `llama-index-llms-gemini` | Gemini LLM for answers |
+| `llama-index-embeddings-gemini` | Document → vector embeddings |
+| `python-dotenv` | Load API key from .env |
 
 ---
 
-## 🧪 Testing
+## ⚙️ Configuration (.env)
 
-```bash
-pytest tests/ -v --tb=short
-```
-
----
-
-## 🗺️ Roadmap
-
-- [x] Phase 1 — Project structure, config, environment setup
-- [ ] Phase 2 — Document loader & ingestion pipeline
-- [ ] Phase 3 — Embedding pipeline & vector index
-- [ ] Phase 4 — Chat engine & Q&A flow
-- [ ] Phase 5 — Testing, hardening, deployment prep
-
----
-
-## 📄 License
-
-MIT
-
----
-
-Built with ❤️ by the Hyyzo team.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_API_KEY` | — | Gemini API key (required) |
+| `LLM_MODEL` | `models/gemini-2.0-flash` | Gemini model |
+| `EMBEDDING_MODEL` | `models/text-embedding-004` | Embedding model |
+| `DOCS_DIR` | `docs` | Knowledge documents path |
+| `CHUNK_SIZE` | `512` | Tokens per chunk |
+| `INDEX_DIR` | `storage` | Vector index storage |

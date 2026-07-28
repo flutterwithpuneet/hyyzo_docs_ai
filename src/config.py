@@ -1,177 +1,28 @@
 """
-hyyzo_docs_ai - Configuration Module
-=====================================
-
-Centralised configuration using pydantic-settings.
-All values are loaded from environment variables / .env file
-with sensible defaults for local development.
+hyyzo_docs_ai - Configuration
 """
 
-from __future__ import annotations
-
-import logging
-import sys
+import os
 from pathlib import Path
-from typing import Optional
+from dotenv import load_dotenv
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+# Load .env
+load_dotenv()
 
-# ------------------------------------------------------------------ #
-# Project Root (two levels up from src/config.py)
-# ------------------------------------------------------------------ #
+# Project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Gemini API
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
-class Settings(BaseSettings):
-    """Application-wide settings populated from environment variables."""
+# Model names
+LLM_MODEL = os.getenv("LLM_MODEL", "models/gemini-2.0-flash")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/text-embedding-004")
 
-    model_config = SettingsConfigDict(
-        env_file=str(PROJECT_ROOT / ".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+# Document settings
+DOCS_DIR = PROJECT_ROOT / os.getenv("DOCS_DIR", "docs")
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "512"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "64"))
 
-    # --- OpenAI ----------------------------------------------------- #
-    openai_api_key: Optional[str] = Field(
-        default=None,
-        description="OpenAI API key. Required only when using OpenAI LLM/embeddings.",
-    )
-
-    # --- Embedding Model ------------------------------------------- #
-    embedding_model_name: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
-        description="HuggingFace model ID for local embeddings.",
-    )
-    embedding_dimension: int = Field(
-        default=384,
-        description="Embedding vector dimension (must match chosen model).",
-    )
-
-    # --- LLM ------------------------------------------------------- #
-    llm_model_name: str = Field(
-        default="gpt-4o-mini",
-        description="LLM model name used for answer generation.",
-    )
-    llm_temperature: float = Field(
-        default=0.1,
-        ge=0.0,
-        le=2.0,
-        description="Sampling temperature for LLM responses.",
-    )
-    llm_max_tokens: int = Field(
-        default=1024,
-        gt=0,
-        description="Maximum tokens in LLM response.",
-    )
-
-    # --- Document Settings ----------------------------------------- #
-    docs_directory: str = Field(
-        default="docs",
-        description="Relative path (from project root) to knowledge documents.",
-    )
-    chunk_size: int = Field(
-        default=512,
-        gt=0,
-        description="Number of tokens per document chunk.",
-    )
-    chunk_overlap: int = Field(
-        default=64,
-        ge=0,
-        description="Token overlap between consecutive chunks.",
-    )
-
-    # --- Index Storage --------------------------------------------- #
-    index_persist_dir: str = Field(
-        default="data/processed/embeddings",
-        description="Directory where the vector index is persisted.",
-    )
-
-    # --- Logging --------------------------------------------------- #
-    log_level: str = Field(
-        default="INFO",
-        description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
-    )
-    log_dir: str = Field(
-        default="logs",
-        description="Directory for log files.",
-    )
-
-    # --- Computed / helper properties ------------------------------ #
-
-    @property
-    def docs_path(self) -> Path:
-        """Absolute path to the knowledge-documents directory."""
-        return PROJECT_ROOT / self.docs_directory
-
-    @property
-    def index_path(self) -> Path:
-        """Absolute path to the persisted vector-index directory."""
-        return PROJECT_ROOT / self.index_persist_dir
-
-    @property
-    def log_path(self) -> Path:
-        """Absolute path to the log directory."""
-        return PROJECT_ROOT / self.log_dir
-
-    # --- Validators ------------------------------------------------ #
-
-    @field_validator("log_level")
-    @classmethod
-    def _validate_log_level(cls, value: str) -> str:
-        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-        upper = value.upper()
-        if upper not in allowed:
-            raise ValueError(f"log_level must be one of {allowed}, got '{value}'")
-        return upper
-
-
-# ------------------------------------------------------------------ #
-# Singleton instance
-# ------------------------------------------------------------------ #
-settings = Settings()
-
-
-# ------------------------------------------------------------------ #
-# Logging bootstrap
-# ------------------------------------------------------------------ #
-
-def setup_logging() -> logging.Logger:
-    """
-    Configure the application-wide logger.
-
-    Returns:
-        Root logger configured with console + file handlers.
-    """
-    log_dir = settings.log_path
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    logger = logging.getLogger("hyyzo_docs_ai")
-    logger.setLevel(settings.log_level)
-
-    # Prevent duplicate handlers on repeated calls
-    if logger.handlers:
-        return logger
-
-    formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(settings.log_level)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    # File handler
-    file_handler = logging.FileHandler(
-        log_dir / "hyyzo_docs_ai.log",
-        encoding="utf-8",
-    )
-    file_handler.setLevel(settings.log_level)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    logger.info("Logger initialised  [level=%s]", settings.log_level)
-    return logger
+# Index storage
+INDEX_DIR = PROJECT_ROOT / os.getenv("INDEX_DIR", "storage")

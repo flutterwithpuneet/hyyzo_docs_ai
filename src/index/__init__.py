@@ -1,1 +1,0 @@
-"""Vector index sub-package."""
