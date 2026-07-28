@@ -1,5 +1,5 @@
 """
-Hyyzo Docs AI — Swiss Minimalist AI Interface
+Hyyzo Docs AI — Gemini Inspired Web Interface
 Run: py -m streamlit run app.py
 """
 
@@ -16,154 +16,157 @@ from src.engine import setup_models, build_index, load_index, get_query_engine
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Hyyzo Docs AI",
-    page_icon="⌘",
+    page_icon="✦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 if "theme" not in st.session_state:
-    st.session_state.theme = "dark"  # Default to Dark Mode (#0B0F19)
+    st.session_state.theme = "dark"
 
 # ---------------------------------------------------------
-# 2. Swiss Design System (Inter Font, Minimal, Flat, Crisp)
+# 2. Gemini Design System (Material 3, Soft Pills, Floating Panels)
 # ---------------------------------------------------------
 is_dark = (st.session_state.theme == "dark")
 
-BG_COLOR = "#0B0F19" if is_dark else "#FFFFFF"
-PANEL_BG = "#111827" if is_dark else "#F9FAFB"
-TEXT_PRIMARY = "#F9FAFB" if is_dark else "#111827"
-TEXT_SECONDARY = "#9CA3AF" if is_dark else "#6B7280"
-BORDER_COLOR = "#1F2937" if is_dark else "#E5E7EB"
-CARD_BG = "#161E2E" if is_dark else "#F3F4F6"
-ACCENT_COLOR = "#2563EB"
+# Gemini Palette Specs:
+BG_COLOR = "#0F1115" if is_dark else "#FFFFFF"
+SURFACE_SECONDARY = "#171A21" if is_dark else "#F8F9FA"
+ELEVATED_CARD = "#20242D" if is_dark else "#F1F3F4"
+TEXT_PRIMARY = "#E3E2E6" if is_dark else "#1F1F1F"
+TEXT_SECONDARY = "#909094" if is_dark else "#5E5E5E"
+ACCENT_BLUE = "#8AB4F8" if is_dark else "#1A73E8"
+BORDER_COLOR = "#2C303B" if is_dark else "#E1E3E1"
+USER_BUBBLE_BG = "#2B303B" if is_dark else "#E8F0FE"
 
 CUSTOM_CSS = f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
 
-    /* Global App Container */
+    /* Global Gemini Styling */
     html, body, .stApp {{
         background-color: {BG_COLOR} !important;
         color: {TEXT_PRIMARY} !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-family: 'Google Sans', 'Inter', -apple-system, sans-serif !important;
         -webkit-font-smoothing: antialiased;
     }}
 
-    /* Remove default Streamlit top header padding */
     .block-container {{
-        padding-top: 2rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 900px !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 5rem !important;
+        max-width: 880px !important;
     }}
 
-    /* Sidebar Styling */
+    /* Collapsible Sidebar - Gemini Style */
     [data-testid="stSidebar"] {{
-        background-color: {PANEL_BG} !important;
+        background-color: {SURFACE_SECONDARY} !important;
         border-right: 1px solid {BORDER_COLOR} !important;
     }}
-    [data-testid="stSidebar"] * {{
-        font-family: 'Inter', sans-serif !important;
-    }}
-
-    /* Minimalist Header */
-    .top-header {{
+    
+    /* Top App Bar Header */
+    .gemini-header {{
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding-bottom: 16px;
-        margin-bottom: 24px;
+        padding-bottom: 20px;
+        margin-bottom: 28px;
         border-bottom: 1px solid {BORDER_COLOR};
     }}
-    .brand-title {{
-        font-size: 1.15rem;
-        font-weight: 600;
-        color: {TEXT_PRIMARY};
-        letter-spacing: -0.02em;
+    .gemini-logo-text {{
+        font-size: 1.3rem;
+        font-weight: 500;
+        letter-spacing: -0.01em;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
+        color: {TEXT_PRIMARY};
     }}
-    .brand-subtitle {{
-        font-size: 0.85rem;
-        color: {TEXT_SECONDARY};
-        margin-top: 2px;
+    .gemini-sparkle {{
+        background: linear-gradient(135deg, #4285F4, #9B51E0, #EA4335);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 1.5rem;
+        font-weight: 700;
     }}
 
-    /* Minimal Flat Buttons */
+    /* Rounded Pill Buttons (Gemini Style) */
     .stButton>button {{
-        border-radius: 6px !important;
+        border-radius: 24px !important;
         border: 1px solid {BORDER_COLOR} !important;
-        background-color: {CARD_BG} !important;
+        background-color: {ELEVATED_CARD} !important;
         color: {TEXT_PRIMARY} !important;
-        font-size: 0.875rem !important;
+        font-size: 0.88rem !important;
         font-weight: 500 !important;
-        padding: 6px 12px !important;
-        transition: background-color 0.15s ease, border-color 0.15s ease !important;
+        padding: 8px 18px !important;
+        transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
         box-shadow: none !important;
     }}
     .stButton>button:hover {{
         background-color: {BORDER_COLOR} !important;
-        border-color: {TEXT_SECONDARY} !important;
-        color: {TEXT_PRIMARY} !important;
+        color: {ACCENT_BLUE} !important;
+        transform: translateY(-1px);
     }}
 
-    /* Chat Messages */
-    [data-testid="stChatMessage"] {{
-        background-color: transparent !important;
-        border: none !important;
-        border-bottom: 1px solid {BORDER_COLOR} !important;
-        padding: 18px 0px !important;
-        border-radius: 0px !important;
+    /* User Message Bubble */
+    .user-msg-bubble {{
+        background-color: {USER_BUBBLE_BG};
+        color: {TEXT_PRIMARY};
+        border-radius: 20px 20px 4px 20px;
+        padding: 14px 18px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        display: inline-block;
+        max-width: 85%;
+        margin-left: auto;
     }}
-    
-    /* Input Container */
+
+    /* Assistant Message (Borderless Clean Typography) */
+    .ai-msg-container {{
+        color: {TEXT_PRIMARY};
+        font-size: 0.95rem;
+        line-height: 1.6;
+        padding: 6px 0px;
+    }}
+
+    /* Floating Gemini-style Input Composer */
     [data-testid="stChatInput"] {{
-        border-radius: 8px !important;
+        border-radius: 28px !important;
         border: 1px solid {BORDER_COLOR} !important;
-        background-color: {PANEL_BG} !important;
+        background-color: {SURFACE_SECONDARY} !important;
         color: {TEXT_PRIMARY} !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
     }}
     [data-testid="stChatInput"]:focus-within {{
-        border-color: {ACCENT_COLOR} !important;
+        border-color: {ACCENT_BLUE} !important;
     }}
 
-    /* Flat Sources Chips */
-    .source-chip {{
+    /* Source Cards Grid */
+    .source-card {{
         display: inline-flex;
         align-items: center;
-        background-color: {CARD_BG};
+        gap: 6px;
+        background-color: {ELEVATED_CARD};
         border: 1px solid {BORDER_COLOR};
-        color: {TEXT_SECONDARY};
-        padding: 4px 10px;
-        border-radius: 6px;
+        color: {ACCENT_BLUE};
+        padding: 6px 12px;
+        border-radius: 16px;
         font-size: 0.8rem;
         font-weight: 500;
-        margin: 4px 6px 4px 0;
-        text-decoration: none;
+        margin: 6px 6px 0 0;
     }}
 
     /* Quick Prompt Cards */
-    .prompt-card {{
+    .starter-card {{
+        background-color: {SURFACE_SECONDARY};
         border: 1px solid {BORDER_COLOR};
-        background-color: {PANEL_BG};
-        padding: 14px 16px;
-        border-radius: 8px;
-        font-size: 0.875rem;
+        border-radius: 16px;
+        padding: 16px;
+        font-size: 0.88rem;
         color: {TEXT_PRIMARY};
-        cursor: pointer;
-        transition: border-color 0.15s ease;
-    }}
-    .prompt-card:hover {{
-        border-color: {ACCENT_COLOR};
-    }}
-    
-    /* Code Blocks Clean Border */
-    pre, code {{
-        font-family: "JetBrains Mono", "SF Mono", Consolas, monospace !important;
-        border-radius: 6px !important;
+        transition: border-color 0.2s ease;
     }}
 
-    /* Hide standard Streamlit header & footer clutter */
+    /* Hide standard Streamlit header & footer */
     #MainMenu, footer, header {{
         visibility: hidden;
     }}
@@ -179,7 +182,7 @@ def initialize_query_engine():
     setup_models()
     index = load_index()
     if index is None:
-        with st.spinner("Indexing documentation..."):
+        with st.spinner("Initializing Gemini knowledge index..."):
             documents = load_documents(DOCS_DIR)
             index = build_index(documents)
     return get_query_engine(index)
@@ -197,7 +200,7 @@ if "chats" not in st.session_state:
     default_id = str(uuid.uuid4())[:8]
     st.session_state.chats = {
         default_id: {
-            "title": "New Conversation",
+            "title": "New Chat",
             "created_at": datetime.datetime.now().strftime("%b %d, %H:%M"),
             "messages": []
         }
@@ -211,18 +214,24 @@ current_chat_id = st.session_state.current_chat_id
 current_chat = st.session_state.chats[current_chat_id]
 
 # ---------------------------------------------------------
-# 5. Swiss Minimal Sidebar
+# 5. Gemini-Inspired Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
-    st.markdown("### ⌘ Hyyzo Docs AI")
-    st.markdown(f"<span style='color: {TEXT_SECONDARY}; font-size: 0.8rem;'>Minimal RAG Assistant</span>", unsafe_allow_html=True)
-    st.write("")
-
-    # New Chat
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span class="gemini-sparkle">✦</span>
+            <span style="font-size: 1.15rem; font-weight: 500;">Hyyzo Docs AI</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # New Chat Pill Button
     if st.button("＋ New Chat", use_container_width=True):
         new_id = str(uuid.uuid4())[:8]
         st.session_state.chats[new_id] = {
-            "title": "New Conversation",
+            "title": "New Chat",
             "created_at": datetime.datetime.now().strftime("%b %d, %H:%M"),
             "messages": []
         }
@@ -230,14 +239,13 @@ with st.sidebar:
         st.rerun()
 
     st.write("")
-    st.markdown(f"<span style='font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: {TEXT_SECONDARY};'>Chat History</span>", unsafe_allow_html=True)
-    st.write("")
+    st.markdown(f"<div style='font-size: 0.78rem; font-weight: 500; color: {TEXT_SECONDARY}; margin-bottom: 8px;'>RECENT CHATS</div>", unsafe_allow_html=True)
 
     # Chat Sessions List
     for cid, chat_data in list(st.session_state.chats.items()):
         col1, col2 = st.columns([0.84, 0.16])
         is_active = (cid == current_chat_id)
-        btn_label = f"{'• ' if is_active else ''}{chat_data['title']}"
+        btn_label = f"{'✦ ' if is_active else '💬 '}{chat_data['title']}"
         
         with col1:
             if st.button(btn_label, key=f"chat_nav_{cid}", use_container_width=True):
@@ -253,36 +261,34 @@ with st.sidebar:
                     st.rerun()
 
     st.write("")
-    st.markdown(f"<div style='border-top: 1px solid {BORDER_COLOR}; margin: 12px 0;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='border-top: 1px solid {BORDER_COLOR}; margin: 16px 0;'></div>", unsafe_allow_html=True)
     
-    # Settings & Theme Toggle
-    st.markdown(f"<span style='font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: {TEXT_SECONDARY};'>Settings</span>", unsafe_allow_html=True)
-    st.write("")
+    # Theme & Index Controls
+    st.markdown(f"<div style='font-size: 0.78rem; font-weight: 500; color: {TEXT_SECONDARY}; margin-bottom: 8px;'>SETTINGS</div>", unsafe_allow_html=True)
     
-    theme_label = "☀️ Light Mode" if is_dark else "🌙 Dark Mode"
+    theme_label = "☀️ Light Theme" if is_dark else "🌙 Dark Theme"
     if st.button(theme_label, use_container_width=True):
         st.session_state.theme = "light" if is_dark else "dark"
         st.rerun()
 
-    if st.button("🔄 Re-index Docs", use_container_width=True):
-        with st.spinner("Re-indexing documents..."):
+    if st.button("🔄 Re-index Knowledge", use_container_width=True):
+        with st.spinner("Updating index..."):
             documents = load_documents(DOCS_DIR)
             index = build_index(documents)
             st.cache_resource.clear()
             st.rerun()
 
 # ---------------------------------------------------------
-# 6. Main Top Navigation Header
+# 6. Gemini Top App Bar
 # ---------------------------------------------------------
 st.markdown(
     f"""
-    <div class="top-header">
-        <div>
-            <div class="brand-title">Hyyzo Docs AI</div>
-            <div class="brand-subtitle">Grounded knowledge retrieval from technical documentation</div>
+    <div class="gemini-header">
+        <div class="gemini-logo-text">
+            <span class="gemini-sparkle">✦</span> Hyyzo Docs AI
         </div>
-        <div style="font-size: 0.8rem; color: {TEXT_SECONDARY}; font-weight: 500;">
-            Model: <span style="color: {TEXT_PRIMARY}; font-weight: 600;">Gemini 2.0 Flash</span>
+        <div style="font-size: 0.85rem; color: {TEXT_SECONDARY}; font-weight: 500;">
+            Grounded with <span style="color: {ACCENT_BLUE}; font-weight: 600;">Gemini 2.0 Flash</span>
         </div>
     </div>
     """,
@@ -293,13 +299,25 @@ st.markdown(
 # 7. Starter View (Empty Chat State)
 # ---------------------------------------------------------
 if not current_chat["messages"]:
-    st.markdown(f"<div style='margin-top: 2rem; margin-bottom: 1.5rem;'><h3 style='font-weight: 600; letter-spacing: -0.02em;'>How can I help you today?</h3><p style='color: {TEXT_SECONDARY}; font-size: 0.9rem;'>Ask questions about system architecture, API endpoints, or gamification logic.</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div style="margin-top: 1.5rem; margin-bottom: 2rem;">
+            <h2 style="font-weight: 400; font-size: 2.2rem; letter-spacing: -0.02em;">
+                <span class="gemini-sparkle">Hello,</span> Developer
+            </h2>
+            <p style="color: {TEXT_SECONDARY}; font-size: 1.05rem; margin-top: 6px;">
+                How can I help you explore your Hyyzo codebase and documentation today?
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     
     p_cols = st.columns(3)
     prompts = [
-        "What is the Rewards Architecture in Hyyzo?",
-        "Explain how Rewards Gamification works.",
-        "List the key components in rewards module."
+        "Explain the Rewards Architecture in Hyyzo.",
+        "How is Rewards Gamification implemented?",
+        "What are the main rewards feature components?"
     ]
     selected_prompt = None
     for idx, pr in enumerate(prompts):
@@ -311,20 +329,23 @@ if not current_chat["messages"]:
 # 8. Render Conversation History
 # ---------------------------------------------------------
 for msg in current_chat["messages"]:
-    avatar_icon = "👤" if msg["role"] == "user" else "⌘"
-    with st.chat_message(msg["role"], avatar=avatar_icon):
-        st.markdown(msg["content"])
-        
-        # Sources Render (Flat & Minimal)
-        if "sources" in msg and msg["sources"]:
-            st.markdown(f"<div style='margin-top: 10px; font-size: 0.75rem; color: {TEXT_SECONDARY}; font-weight: 600;'>SOURCES</div>", unsafe_allow_html=True)
-            sources_html = ""
-            for s in msg["sources"]:
-                sources_html += f"""<span class="source-chip">📄 {s['file']} <span style="opacity:0.6; margin-left:4px;">({s['score']})</span></span>"""
-            st.markdown(sources_html, unsafe_allow_html=True)
+    if msg["role"] == "user":
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(msg["content"])
+    else:
+        with st.chat_message("assistant", avatar="✦"):
+            st.markdown(msg["content"])
+            
+            # Document Sources Pill Tags
+            if "sources" in msg and msg["sources"]:
+                st.markdown(f"<div style='margin-top: 14px; font-size: 0.78rem; color: {TEXT_SECONDARY}; font-weight: 500;'>DOCUMENT SOURCES</div>", unsafe_allow_html=True)
+                sources_html = ""
+                for s in msg["sources"]:
+                    sources_html += f"""<span class="source-card">📄 {s['file']} <span style="opacity:0.6; margin-left:2px;">({s['score']})</span></span>"""
+                st.markdown(sources_html, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 9. Chat Input & Processing
+# 9. Chat Input & Response Processing
 # ---------------------------------------------------------
 user_input = st.chat_input("Ask anything about Hyyzo...")
 
@@ -333,12 +354,12 @@ if 'selected_prompt' in locals() and selected_prompt:
 
 if user_input:
     if not current_chat["messages"]:
-        current_chat["title"] = user_input[:28] + "..." if len(user_input) > 28 else user_input
+        current_chat["title"] = user_input[:26] + "..." if len(user_input) > 26 else user_input
 
     st.chat_message("user", avatar="👤").markdown(user_input)
     current_chat["messages"].append({"role": "user", "content": user_input})
 
-    with st.chat_message("assistant", avatar="⌘"):
+    with st.chat_message("assistant", avatar="✦"):
         with st.spinner(""):
             try:
                 response = query_engine.query(user_input)
@@ -354,10 +375,10 @@ if user_input:
                         }
                         for n in response.source_nodes
                     ]
-                    st.markdown(f"<div style='margin-top: 10px; font-size: 0.75rem; color: {TEXT_SECONDARY}; font-weight: 600;'>SOURCES</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-top: 14px; font-size: 0.78rem; color: {TEXT_SECONDARY}; font-weight: 500;'>DOCUMENT SOURCES</div>", unsafe_allow_html=True)
                     sources_html = ""
                     for s in sources:
-                        sources_html += f"""<span class="source-chip">📄 {s['file']} <span style="opacity:0.6; margin-left:4px;">({s['score']})</span></span>"""
+                        sources_html += f"""<span class="source-card">📄 {s['file']} <span style="opacity:0.6; margin-left:2px;">({s['score']})</span></span>"""
                     st.markdown(sources_html, unsafe_allow_html=True)
 
                 current_chat["messages"].append({
@@ -366,6 +387,6 @@ if user_input:
                     "sources": sources
                 })
             except Exception as ex:
-                st.error(f"Error: {ex}")
+                st.error(f"Error generating answer: {ex}")
 
 
