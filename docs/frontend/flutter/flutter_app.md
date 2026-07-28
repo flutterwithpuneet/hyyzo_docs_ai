@@ -25,6 +25,7 @@ lib/
 │   ├── auth/
 │   ├── chat/
 │   ├── documents/
+│   ├── rewards/           # Rewards, Coins, Scratch Cards & Cashback
 │   └── settings/
 ├── core/
 │   ├── api/
