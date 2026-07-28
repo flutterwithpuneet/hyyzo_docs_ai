@@ -1,6 +1,5 @@
 # hyyzo_docs_ai - Requirements
-# Python 3.13+
-
+pillow>=10.4.0
 llama-index-core
 llama-index-readers-file
 llama-index-llms-gemini
