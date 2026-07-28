@@ -1,158 +1,94 @@
-# Hyyzo Rewards Feature - Actual Structure Documentation
+# Hyyzo Rewards Feature - End-to-End Complete Documentation
 
-This document covers the exact codebase structure, architecture, and file explanations of the **Rewards Feature** in `hyyzo_flutter`.
+Comprehensive end-to-end technical documentation for the **Rewards & Gamification Feature** in `hyyzo_flutter` (`lib/features/rewards/`).
 
 ---
 
-## 📁 Exact File & Folder Tree
+## 🏗️ Architecture & Layer Overview
+
+The **Rewards Feature** follows Clean Architecture principles divided into clear layers:
+
+```
+lib/features/rewards/
+├── data/           # Data source implementations & Repository implementations
+├── di/             # Dependency Injection & Provider registration
+├── domain/         # Business logic core (Entities & Repository contracts)
+├── presentation/   # UI Layer (Pages, Custom Widgets, Controllers/ViewModels)
+└── utils/          # Feature constants & calculation helpers
+```
+
+---
+
+## 📁 Detailed Folder & File Structure
 
 ```
 lib/features/rewards/
 │
 ├── data/
 │   └── repositories/
-│       └── rewards_repository_impl.dart          # Implementation of RewardsRepository fetching data
+│       └── rewards_repository_impl.dart          # Implements RewardsRepository contract for API/local data
 │
 ├── di/
-│   ├── rewards_bloc_providers.dart               # Dependency injection / Bloc providers for rewards
-│   └── rewards_repository_providers.dart         # Repository dependency injection providers
+│   ├── rewards_bloc_providers.dart               # Blocs/Controllers DI providers
+│   └── rewards_repository_providers.dart         # Repository DI providers
 │
 ├── domain/
 │   ├── entities/
-│   │   ├── offers_rewards_entities.dart          # Entities for offers and rewards models
-│   │   └── play_and_win_game.dart                # Entities for games (Spin Wheel, Treasure Box)
+│   │   ├── offers_rewards_entities.dart          # OfferItem, RecommendedDeal, FaqItem models
+│   │   └── play_and_win_game.dart                # Gamification models (SpinPrize, SpinAndWinGame, TreasureBoxGame, RewardPopupData, etc.)
 │   └── repositories/
-│       └── rewards_repository.dart               # Abstract interface for Rewards repository
+│       └── rewards_repository.dart               # Abstract interface defining Rewards contracts
 │
 ├── presentation/
 │   ├── logic/
-│   │   └── offers_and_rewards_controller.dart    # Controller/Bloc handling rewards & offers state logic
+│   │   └── offers_and_rewards_controller.dart    # State controller & scroll logic for Offers & Rewards page
 │   │
 │   ├── pages/
-│   │   ├── offers_and_rewards_page.dart          # Main offers & rewards screen container
-│   │   ├── power_spin_screen.dart                # Power Spin Wheel interactive game screen
-│   │   ├── rewards_screen.dart                   # Rewards home & overview screen
-│   │   └── treasure_box_screen.dart              # Treasure box unlock game screen
+│   │   ├── offers_and_rewards_page.dart          # Main Offers & Rewards discovery page
+│   │   ├── power_spin_screen.dart                # Interactive Power Spin & Win wheel game screen
+│   │   ├── rewards_screen.dart                   # Rewards overview dashboard & collected rewards page
+│   │   └── treasure_box_screen.dart              # Interactive mystery Treasure Box opening game screen
 │   │
 │   └── widgets/
-│       ├── collected_rewards_grid.dart           # Grid view showing user's unlocked rewards
-│       ├── reward_popup.dart                     # Dialog popup when a reward is earned
-│       ├── reward_popup_dialog.dart              # Modal overlay wrapper for reward popup
-│       ├── store_rewards_grid.dart               # Grid displaying available store rewards
+│       ├── collected_rewards_grid.dart           # Grid displaying user's unlocked reward cards
+│       ├── reward_popup.dart                     # Custom graphic asset popup layout for claimed rewards
+│       ├── reward_popup_dialog.dart              # Modal dialog overlay for reward claim celebrations
+│       ├── store_rewards_grid.dart               # Grid layout showcasing store cashback vouchers
 │       │
-│       ├── common/                               # Reusable core widgets
-│       │   ├── reward_background_widget.dart     # Gradient/styled background container
-│       │   ├── reward_card_container.dart        # Stylized card container widget
-│       │   ├── reward_primary_button.dart        # Custom styled action button
-│       │   └── reward_section_title.dart         # Section title header text widget
+│       ├── common/                               # Reusable base UI components
+│       │   ├── reward_background_widget.dart     # Gradient & styled container background
+│       │   ├── reward_card_container.dart        # Stylized card wrapper with elevation & shadows
+│       │   ├── reward_primary_button.dart        # Reusable styled CTA primary button
+│       │   └── reward_section_title.dart         # Styled section header typography widget
 │       │
-│       ├── play_and_win_widget/                  # Play & Win game card widgets
-│       │   ├── play_and_win_card.dart            # Base card widget for games
-│       │   ├── spin_and_win_card.dart            # Spin Wheel game shortcut card
-│       │   └── treasure_box_card.dart            # Treasure Box game shortcut card
+│       ├── play_and_win_widget/                  # Game launcher cards
+│       │   ├── play_and_win_card.dart            # Standard game launcher card component
+│       │   ├── spin_and_win_card.dart            # Banner card for Power Spin game
+│       │   └── treasure_box_card.dart            # Banner card for Treasure Box mystery game
 │       │
-│       ├── reward_widgets/                       # Sub-widgets for Rewards Screen
-│       │   ├── cashback_banner_widget.dart       # Promotional cashback banner
-│       │   ├── faq_section_widget.dart           # Rewards FAQ accordion/list
-│       │   ├── how_to_earn_cashback_widget.dart  # Explanatory step-by-step guide widget
-│       │   ├── offers_section_widget.dart        # Active offers section
-│       │   ├── promo_banner_widget.dart          # Promotional banner slider
-│       │   ├── rewards_app_bar.dart              # Custom App Bar for rewards screens
-│       │   ├── rewards_bg_parallax.dart          # Parallax background effect widget
-│       │   ├── rewards_button.dart               # Specialized rewards button
-│       │   ├── rewards_cards.dart                # Card component for reward items
-│       │   ├── rewards_header.dart               # Balance and user status header
-│       │   ├── reward_back_widget.dart           # Background graphic element
-│       │   ├── reward_store_widget.dart          # Rewards store showcase widget
-│       │   └── stores_section_widget.dart        # Participating stores grid/list
+│       ├── reward_widgets/                       # Sub-widgets for Rewards Screen & Offers
+│       │   ├── cashback_banner_widget.dart       # Active promotional cashback banner
+│       │   ├── faq_section_widget.dart           # Collapsible FAQ accordion section
+│       │   ├── how_to_earn_cashback_widget.dart  # Step-by-step guide widget on earning cashback
+│       │   ├── offers_section_widget.dart        # Horizontal list of top category offers
+│       │   ├── promo_banner_widget.dart          # Interactive promotional carousel slider
+│       │   ├── rewards_app_bar.dart              # Dynamic transparent-to-solid App Bar with coin balance
+│       │   ├── rewards_bg_parallax.dart          # Smooth parallax scrolling background effect
+│       │   ├── rewards_button.dart               # Specialized claim/redeem action button
+│       │   ├── rewards_cards.dart                # Card component for cashback reward items
+│       │   ├── rewards_header.dart               # Coin balance showcase header widget
+│       │   ├── reward_back_widget.dart           # Background decorative layout graphics
+│       │   ├── reward_store_widget.dart          # Featured store spotlight card widget
+│       │   └── stores_section_widget.dart        # Participating stores grid layout
 │       │
-│       └── spin_wheel_widget/                    # Sub-widgets for Spin Wheel Game
-│           ├── spin_action_buttons.dart          # Spin trigger & claim buttons
-│           ├── spin_counter_header.dart          # Remaining spins counter widget
-│           ├── spin_particle_painter.dart        # Custom painter for spin celebration particles
-│           ├── spin_rotating_background.dart     # Animated rotating glow background
-│           └── spin_wheel_widget.dart            # Interactive rotating wheel widget
+│       └── spin_wheel_widget/                    # Gamified Spin Wheel sub-components
+│           ├── spin_action_buttons.dart          # Interactive spin trigger and claim buttons
+│           ├── spin_counter_header.dart          # Daily remaining spins counter badge
+│           ├── spin_particle_painter.dart        # Custom Canvas Particle Painter for celebration effects
+│           ├── spin_rotating_background.dart     # Animated rotating radial background light
+│           └── spin_wheel_widget.dart            # Core CustomPainter fortune wheel with touch/drag support
 │
 └── utils/
-    ├── rewards_calculator.dart                   # Math utility for cashback & coin conversions
-    └── rewards_page_constants.dart               # Constant strings, layout values, & keys
-```
-
----
-
-## 📑 File-by-File Breakdown & Description
-
-### 1. `data/` Layer
-- **`data/repositories/rewards_repository_impl.dart`**: Implements `RewardsRepository`. Interacts with remote APIs and local storage to fetch available rewards, claim rewards, and query spin limits.
-
----
-
-### 2. `di/` (Dependency Injection) Layer
-- **`di/rewards_bloc_providers.dart`**: Registers and provides `OffersAndRewardsController` / Blocs to the widget tree.
-- **`di/rewards_repository_providers.dart`**: Provides the `RewardsRepositoryImpl` singleton across the rewards feature.
-
----
-
-### 3. `domain/` Layer
-- **`domain/entities/offers_rewards_entities.dart`**: Core data models for cashback offers, reward cards, and store vouchers.
-- **`domain/entities/play_and_win_game.dart`**: Core data models for gamification features (Spin & Win, Treasure Box options, items, and prizes).
-- **`domain/repositories/rewards_repository.dart`**: Abstract interface establishing contracts for rewards data fetching and interactions.
-
----
-
-### 4. `presentation/logic/`
-- **`presentation/logic/offers_and_rewards_controller.dart`**: State management logic for loading rewards, claiming rewards, handling spin attempts, and managing state transitions.
-
----
-
-### 5. `presentation/pages/`
-- **`presentation/pages/offers_and_rewards_page.dart`**: Container page for browsing offers and reward options.
-- **`presentation/pages/power_spin_screen.dart`**: Gamified Power Spin screen featuring the interactive wheel and particle animations.
-- **`presentation/pages/rewards_screen.dart`**: Main Rewards screen featuring coins header, collected rewards, and store shortcuts.
-- **`presentation/pages/treasure_box_screen.dart`**: Interactive screen where users open mystery treasure boxes to claim prizes.
-
----
-
-### 6. `presentation/widgets/`
-
-#### Base & Common Widgets
-- **`collected_rewards_grid.dart`**: Displays user's earned/unlocked rewards in a grid layout.
-- **`reward_popup.dart` & `reward_popup_dialog.dart`**: Animated popup dialog for celebrating won rewards.
-- **`store_rewards_grid.dart`**: Grid layout listing store-specific reward vouchers.
-- **`common/reward_background_widget.dart`**: Shared background styling component.
-- **`common/reward_card_container.dart`**: Card wrapper providing consistent elevation and rounded corners.
-- **`common/reward_primary_button.dart`**: Primary styled action button for rewards pages.
-- **`common/reward_section_title.dart`**: Typography widget for section headers.
-
-#### Play & Win Widgets
-- **`play_and_win_widget/play_and_win_card.dart`**: Card component highlighting games.
-- **`play_and_win_widget/spin_and_win_card.dart`**: Banner card directing users to the Power Spin game.
-- **`play_and_win_widget/treasure_box_card.dart`**: Banner card directing users to the Treasure Box game.
-
-#### Reward Screen Sub-Widgets (`reward_widgets/`)
-- **`cashback_banner_widget.dart`**: Banner highlighting active cashback rates.
-- **`faq_section_widget.dart`**: Frequently Asked Questions section for rewards.
-- **`how_to_earn_cashback_widget.dart`**: Step-by-step guide explaining how cashback works.
-- **`offers_section_widget.dart`**: Horizontal list of featured cashback offers.
-- **`promo_banner_widget.dart`**: Promotional carousel banner.
-- **`rewards_app_bar.dart`**: Customized top app bar with coins display.
-- **`rewards_bg_parallax.dart`**: Parallax scrolling background effect.
-- **`rewards_button.dart`**: Custom button for reward redemption.
-- **`rewards_cards.dart`**: Card UI for individual reward items.
-- **`rewards_header.dart`**: Top header section showing total earned coins.
-- **`reward_back_widget.dart`**: Decorative background graphic.
-- **`reward_store_widget.dart`**: Section highlighting popular stores offering cashback.
-- **`stores_section_widget.dart`**: Grid view of partner stores.
-
-#### Spin Wheel Widgets (`spin_wheel_widget/`)
-- **`spin_action_buttons.dart`**: Action controls to spin the wheel.
-- **`spin_counter_header.dart`**: Displays remaining daily spin attempts.
-- **`spin_particle_painter.dart`**: Custom canvas painter rendering victory particle animations.
-- **`spin_rotating_background.dart`**: Rotating radial glow background animation.
-- **`spin_wheel_widget.dart`**: Core fortune wheel canvas widget.
-
----
-
 ### 7. `utils/` Layer
 - **`utils/rewards_calculator.dart`**: Helper methods to compute cashback percentages, coin conversions, and discounts.
 - **`utils/rewards_page_constants.dart`**: Centralized UI constants, strings, asset paths, and configuration keys used across rewards screens.
