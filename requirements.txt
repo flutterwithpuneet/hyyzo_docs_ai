@@ -6,3 +6,4 @@ llama-index-readers-file
 llama-index-llms-gemini
 llama-index-embeddings-gemini
 python-dotenv
+streamlit
