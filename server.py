@@ -71,6 +71,14 @@ def set_model(req: ModelRequest):
     except Exception as ex:
         raise HTTPException(status_code=500, detail=str(ex))
 
+@app.get("/")
+def root():
+    return {
+        "message": "Welcome to Hyyzo Docs AI Backend API",
+        "docs": "/docs",
+        "health": "/api/health"
+    }
+
 @app.get("/api/health")
 def health_check():
     return {
