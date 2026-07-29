@@ -6,3 +6,5 @@ llama-index-llms-gemini
 llama-index-embeddings-gemini
 python-dotenv
 streamlit
+fastapi
+uvicorn
