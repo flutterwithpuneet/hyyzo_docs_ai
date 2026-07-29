@@ -61,7 +61,7 @@ export default function VercelAIChatbot() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [modelSelected, setModelSelected] = useState("gemini-2.0-flash");
+  const [modelSelected, setModelSelected] = useState("gemini-flash-latest");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [docFiles, setDocFiles] = useState<DocFile[]>([]);
   const [showDocsModal, setShowDocsModal] = useState(false);
@@ -465,8 +465,8 @@ export default function VercelAIChatbot() {
                 onChange={(e) => handleModelChange(e.target.value)}
                 className="bg-transparent border-none outline-none font-medium cursor-pointer appearance-none pr-4 text-xs"
               >
-                <option value="gemini-2.5-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
-                  Google Gemini 2.5 Flash
+                <option value="gemini-flash-latest" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini Flash (Recommended)
                 </option>
                 <option value="gemini-2.0-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
                   Google Gemini 2.0 Flash
