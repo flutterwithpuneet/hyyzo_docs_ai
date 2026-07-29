@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from src.config import DOCS_DIR
 from src.loader import load_documents
-from src.engine import setup_models, build_index, load_index, get_query_engine
+from src.engine import setup_models, build_index, load_index, get_query_engine, set_active_llm
 
 app = FastAPI(title="Hyyzo Docs AI API", version="1.0.0")
 
@@ -27,6 +27,7 @@ app.add_middleware(
 
 # Global Query Engine instance
 global_query_engine = None
+current_model_name = "gemini-2.0-flash"
 
 def init_engine():
     global global_query_engine
@@ -48,15 +49,27 @@ def on_startup():
 
 class QueryRequest(BaseModel):
     question: str
+    model: Optional[str] = "gemini-2.0-flash"
 
 class SourceItem(BaseModel):
     file: str
     score: str
     snippet: Optional[str] = ""
 
+class ModelRequest(BaseModel):
+    model: str
+
 class QueryResponse(BaseModel):
     answer: str
     sources: List[SourceItem]
+
+@app.post("/api/set-model")
+def set_model(req: ModelRequest):
+    try:
+        set_active_llm(req.model)
+        return {"status": "success", "model": req.model}
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
 
 @app.get("/api/health")
 def health_check():
@@ -68,7 +81,7 @@ def health_check():
 
 @app.post("/api/query", response_model=QueryResponse)
 def query_rag(req: QueryRequest):
-    global global_query_engine
+    global global_query_engine, current_model_name
     if global_query_engine is None:
         init_engine()
         if global_query_engine is None:
@@ -78,6 +91,10 @@ def query_rag(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
+        if req.model and req.model != current_model_name:
+            set_active_llm(req.model)
+            current_model_name = req.model
+
         response = global_query_engine.query(req.question)
         answer_text = str(response)
 

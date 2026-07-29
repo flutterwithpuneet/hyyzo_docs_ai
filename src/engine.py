@@ -21,6 +21,16 @@ def setup_models():
     print(f"[OK] Models configured: LLM={LLM_MODEL}, Embed={EMBEDDING_MODEL}")
 
 
+def set_active_llm(model_name: str):
+    """Update active LLM model dynamically."""
+    if not model_name:
+        return
+    # Ensure correct Gemini prefix if needed (e.g. models/gemini-2.0-flash)
+    formatted_name = model_name if model_name.startswith("models/") else f"models/{model_name}"
+    Settings.llm = Gemini(api_key=GOOGLE_API_KEY, model=formatted_name)
+    print(f"[OK] LLM updated to: {formatted_name}")
+
+
 def build_index(documents):
     """Create a vector index from documents and save to disk."""
     index = VectorStoreIndex.from_documents(documents)

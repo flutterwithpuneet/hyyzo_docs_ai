@@ -78,6 +78,10 @@ export default function VercelAIChatbot() {
     if (savedTheme) {
       setTheme(savedTheme);
     }
+    const savedModel = localStorage.getItem("hyyzo-model");
+    if (savedModel) {
+      setModelSelected(savedModel);
+    }
   }, []);
 
   useEffect(() => {
@@ -88,6 +92,11 @@ export default function VercelAIChatbot() {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
+  const handleModelChange = (newModel: string) => {
+    setModelSelected(newModel);
+    localStorage.setItem("hyyzo-model", newModel);
+  };
 
   useEffect(() => {
     const defaultChatId = Math.random().toString(36).substring(2, 9);
@@ -192,7 +201,7 @@ export default function VercelAIChatbot() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryText })
+        body: JSON.stringify({ question: queryText, model: modelSelected })
       });
 
       if (!res.ok) {
@@ -445,14 +454,28 @@ export default function VercelAIChatbot() {
             )}
 
             {/* Model Selector Pill */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${
+            <div className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${
               theme === 'dark'
                 ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
                 : 'bg-zinc-100 border-zinc-300 text-zinc-700'
             }`}>
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Google Gemini 2.0 Flash</span>
-              <ChevronDown className={`w-3 h-3 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`} />
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <select
+                value={modelSelected}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="bg-transparent border-none outline-none font-medium cursor-pointer appearance-none pr-4 text-xs"
+              >
+                <option value="gemini-2.0-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini 2.0 Flash
+                </option>
+                <option value="gemini-1.5-pro" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini 1.5 Pro
+                </option>
+                <option value="gemini-1.5-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini 1.5 Flash
+                </option>
+              </select>
+              <ChevronDown className={`w-3 h-3 pointer-events-none absolute right-2.5 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`} />
             </div>
           </div>
 

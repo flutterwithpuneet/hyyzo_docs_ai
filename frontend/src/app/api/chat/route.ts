@@ -5,7 +5,7 @@ const PYTHON_FASTAPI_URL = process.env.PYTHON_FASTAPI_URL || "http://localhost:8
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { question } = body;
+    const { question, model } = body;
 
     if (!question || typeof question !== "string") {
       return NextResponse.json(
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const pyRes = await fetch(`${PYTHON_FASTAPI_URL}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, model }),
     });
 
     if (!pyRes.ok) {
