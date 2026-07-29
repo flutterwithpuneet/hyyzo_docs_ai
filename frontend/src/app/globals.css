@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --bg-color: #0b0f17;
-  --surface-sidebar: #111827;
-  --card-bg: #1f2937;
-  --border-color: #374151;
-  --text-primary: #f9fafb;
-  --text-muted: #9ca3af;
+  --bg-color: #fcfcfd;
+  --surface-sidebar: #f4f4f5;
+  --card-bg: #ffffff;
+  --border-color: #e4e4e7;
+  --text-primary: #09090b;
+  --text-muted: #71717a;
+  --accent-blue: #2563eb;
+  --accent-purple: #7c3aed;
+}
+
+.dark {
+  --bg-color: #09090b;
+  --surface-sidebar: #121215;
+  --card-bg: #18181b;
+  --border-color: #27272a;
+  --text-primary: #f4f4f5;
+  --text-muted: #a1a1aa;
   --accent-blue: #3b82f6;
   --accent-purple: #8b5cf6;
 }
@@ -16,27 +27,43 @@ body {
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Custom Glassmorphism & Micro-animations */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.75);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .glass-panel {
+  background: rgba(18, 18, 21, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card {
-  background: rgba(31, 41, 55, 0.6);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.dark .glass-card {
+  background: rgba(24, 24, 27, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 .glass-card:hover {
-  background: rgba(31, 41, 55, 0.9);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(37, 99, 235, 0.4);
   transform: translateY(-2px);
+}
+
+.dark .glass-card:hover {
+  background: rgba(24, 24, 27, 0.9);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 /* Custom Scrollbar */
@@ -48,9 +75,9 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.25);
+  background: rgba(161, 161, 170, 0.3);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.5);
+  background: rgba(161, 161, 170, 0.6);
 }
