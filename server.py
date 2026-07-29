@@ -65,8 +65,12 @@ class QueryResponse(BaseModel):
 
 @app.post("/api/set-model")
 def set_model(req: ModelRequest):
+    global global_query_engine
     try:
         set_active_llm(req.model)
+        index = load_index()
+        if index is not None:
+            global_query_engine = get_query_engine(index)
         return {"status": "success", "model": req.model}
     except Exception as ex:
         raise HTTPException(status_code=500, detail=str(ex))

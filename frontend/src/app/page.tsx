@@ -465,14 +465,14 @@ export default function VercelAIChatbot() {
                 onChange={(e) => handleModelChange(e.target.value)}
                 className="bg-transparent border-none outline-none font-medium cursor-pointer appearance-none pr-4 text-xs"
               >
+                <option value="gemini-2.5-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini 2.5 Flash
+                </option>
                 <option value="gemini-2.0-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
                   Google Gemini 2.0 Flash
                 </option>
-                <option value="gemini-1.5-pro" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
-                  Google Gemini 1.5 Pro
-                </option>
-                <option value="gemini-1.5-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
-                  Google Gemini 1.5 Flash
+                <option value="gemini-2.0-flash-lite" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                  Google Gemini 2.0 Flash Lite
                 </option>
               </select>
               <ChevronDown className={`w-3 h-3 pointer-events-none absolute right-2.5 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`} />
