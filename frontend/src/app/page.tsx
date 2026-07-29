@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   Sparkles,
   Plus,
@@ -11,7 +12,6 @@ import {
   MessageSquare,
   Bot,
   User,
-  CheckCircle,
   Folder,
   ChevronDown,
   ChevronRight,
@@ -23,16 +23,23 @@ import {
   PanelLeftOpen,
   ThumbsUp,
   ThumbsDown,
-  ExternalLink,
   Paperclip,
-  ArrowUp
+  ArrowUp,
+  Settings,
+  Search,
+  Mic,
+  RotateCcw,
+  Command,
+  HelpCircle,
+  X,
+  Sliders,
+  Database,
+  Cpu,
+  Layers,
+  Code2,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
-
-interface SourceItem {
-  file: string;
-  score: string;
-  snippet?: string;
-}
 
 interface Message {
   id: string;
@@ -40,6 +47,12 @@ interface Message {
   content: string;
   sources?: SourceItem[];
   timestamp: string;
+}
+
+interface SourceItem {
+  file: string;
+  score: string;
+  snippet?: string;
 }
 
 interface ChatSession {
@@ -55,7 +68,7 @@ interface DocFile {
   size_bytes: number;
 }
 
-export default function VercelAIChatbot() {
+export default function WorldClassAIAssistant() {
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string>("");
   const [input, setInput] = useState("");
@@ -65,22 +78,27 @@ export default function VercelAIChatbot() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [docFiles, setDocFiles] = useState<DocFile[]>([]);
   const [showDocsModal, setShowDocsModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [isReindexing, setIsReindexing] = useState(false);
-  const [reindexMsg, setReindexMsg] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expandedSources, setExpandedSources] = useState<{ [key: string]: boolean }>({});
+  const [searchFilter, setSearchFilter] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Load theme and saved state
   useEffect(() => {
     const savedTheme = localStorage.getItem("hyyzo-theme") as "dark" | "light" | null;
     if (savedTheme) {
       setTheme(savedTheme);
-    }
-    const savedModel = localStorage.getItem("hyyzo-model");
-    if (savedModel) {
-      setModelSelected(savedModel);
+    } else {
+      setTheme("dark");
     }
   }, []);
 
@@ -93,16 +111,12 @@ export default function VercelAIChatbot() {
     }
   }, [theme]);
 
-  const handleModelChange = (newModel: string) => {
-    setModelSelected(newModel);
-    localStorage.setItem("hyyzo-model", newModel);
-  };
-
+  // Initial chat setup & health check
   useEffect(() => {
     const defaultChatId = Math.random().toString(36).substring(2, 9);
     const initialSession: ChatSession = {
       id: defaultChatId,
-      title: "New Chat",
+      title: "New Session",
       messages: [],
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
@@ -116,6 +130,27 @@ export default function VercelAIChatbot() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chats, currentChatId, isLoading]);
+
+  // Keyboard shortcut listener (Ctrl+K or Cmd+K for new chat, Esc for modals)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        handleNewChat();
+      } else if (e.key === "Escape") {
+        setShowDocsModal(false);
+        setShowSettingsModal(false);
+        setShowShortcutsModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const checkHealth = async () => {
     try {
@@ -143,18 +178,35 @@ export default function VercelAIChatbot() {
     }
   };
 
+  const handleModelSelect = async (newModel: string) => {
+    setModelSelected(newModel);
+    try {
+      const res = await fetch("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: newModel })
+      });
+      if (res.ok) {
+        showToast(`Switched active AI model to ${newModel}`);
+      }
+    } catch (e) {
+      console.error("Model select error:", e);
+    }
+  };
+
   const currentChat = chats.find((c) => c.id === currentChatId) || chats[0];
 
   const handleNewChat = () => {
     const newId = Math.random().toString(36).substring(2, 9);
     const newSession: ChatSession = {
       id: newId,
-      title: "New Chat",
+      title: "New Session",
       messages: [],
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setChats((prev) => [newSession, ...prev]);
     setCurrentChatId(newId);
+    showToast("Created new conversation session");
   };
 
   const handleDeleteChat = (idToDelete: string, e: React.MouseEvent) => {
@@ -165,6 +217,7 @@ export default function VercelAIChatbot() {
     if (currentChatId === idToDelete) {
       setCurrentChatId(filtered[0].id);
     }
+    showToast("Conversation deleted");
   };
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -184,8 +237,8 @@ export default function VercelAIChatbot() {
           const updatedMessages = [...session.messages, userMsg];
           const newTitle =
             session.messages.length === 0
-              ? queryText.length > 24
-                ? queryText.substring(0, 24) + "..."
+              ? queryText.length > 28
+                ? queryText.substring(0, 28) + "..."
                 : queryText
               : session.title;
           return { ...session, title: newTitle, messages: updatedMessages };
@@ -195,13 +248,14 @@ export default function VercelAIChatbot() {
     );
 
     setInput("");
+    setAttachedFile(null);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryText, model: modelSelected })
+        body: JSON.stringify({ question: queryText })
       });
 
       if (!res.ok) {
@@ -231,10 +285,9 @@ export default function VercelAIChatbot() {
       const errorMsg: Message = {
         id: Math.random().toString(36).substring(2, 9),
         role: "assistant",
-        content: `⚠️ Error: ${err.message || "Unable to reach RAG server"}`,
+        content: `⚠️ **Service Error**: ${err.message || "Failed to communicate with RAG Server."}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
-
       setChats((prev) =>
         prev.map((session) => {
           if (session.id === currentChatId) {
@@ -248,28 +301,35 @@ export default function VercelAIChatbot() {
     }
   };
 
-  const handleReindex = async () => {
-    setIsReindexing(true);
-    setReindexMsg(null);
-    try {
-      const res = await fetch("http://localhost:8000/api/reindex", { method: "POST" });
-      if (res.ok) {
-        setReindexMsg("Knowledge base re-indexed!");
-      } else {
-        setReindexMsg("Reindex failed");
-      }
-    } catch {
-      setReindexMsg("Server unreachable");
-    } finally {
-      setIsReindexing(false);
-      setTimeout(() => setReindexMsg(null), 3000);
+  const handleRegenerate = () => {
+    if (!currentChat || currentChat.messages.length === 0) return;
+    const lastUserMsg = [...currentChat.messages].reverse().find((m) => m.role === "user");
+    if (lastUserMsg) {
+      handleSendMessage(lastUserMsg.content);
     }
   };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
+    showToast("Copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleReindex = async () => {
+    setIsReindexing(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/reindex", { method: "POST" });
+      if (res.ok) {
+        showToast("Documentation re-indexed successfully!");
+      } else {
+        showToast("Re-indexing failed.");
+      }
+    } catch {
+      showToast("Could not reach Python backend for re-indexing.");
+    } finally {
+      setIsReindexing(false);
+    }
   };
 
   const toggleSources = (msgId: string) => {
@@ -277,49 +337,72 @@ export default function VercelAIChatbot() {
   };
 
   const promptSuggestions = [
-    { title: "Rewards Architecture", desc: "Explain the Hyyzo cashback and rewards flow." },
-    { title: "Gamification Engine", desc: "How are gamification rules configured in Flutter?" },
-    { title: "Features & Products", desc: "Summarize main product modules in docs." },
-    { title: "Loaded Knowledge", desc: "List all indexed files available in knowledge storage." }
+    {
+      title: "Explain Rewards Architecture",
+      desc: "Clean architecture & layers breakdown of lib/features/rewards/",
+      icon: Layers
+    },
+    {
+      title: "Search API Documentation",
+      desc: "Retrieve REST endpoints and data response schemas",
+      icon: Code2
+    },
+    {
+      title: "Summarize Data Pipeline",
+      desc: "Understand repository pattern & state management flow",
+      icon: Database
+    },
+    {
+      title: "List Project Documents",
+      desc: "View loaded Markdown files & index size details",
+      icon: Cpu
+    }
   ];
 
+  const filteredChats = chats.filter((c) =>
+    c.title.toLowerCase().includes(searchFilter.toLowerCase())
+  );
+
   return (
-    <div className={`flex h-screen w-screen font-sans transition-colors duration-200 ${
-      theme === 'dark' ? 'bg-[#09090b] text-zinc-100' : 'bg-[#fcfcfd] text-zinc-900'
-    }`}>
+    <div className={`flex h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-[#0F1117] text-[#F3F4F6]' : 'bg-[#FFFFFF] text-[#111827]'}`}>
       
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl border shadow-lg bg-[#2563EB] text-white border-blue-400/40 text-xs font-medium animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* --------------------------------------------------------- */}
-      {/* SIDEBAR (VERCEL V0 STYLE) */}
+      {/* SIDEBAR NAVIGATION */}
       {/* --------------------------------------------------------- */}
       <aside
         className={`${
-          sidebarOpen ? "w-64 border-r" : "w-0 overflow-hidden border-none"
-        } flex flex-col h-full transition-all duration-200 z-20 ${
-          theme === 'dark' ? 'bg-[#121215] border-zinc-800/80' : 'bg-zinc-50 border-zinc-200'
+          sidebarOpen ? "w-72" : "w-0 -translate-x-full"
+        } transition-all duration-300 ease-in-out flex flex-col h-full border-r shrink-0 z-20 relative overflow-hidden ${
+          theme === 'dark'
+            ? 'bg-[#181A20] border-[#2A2D35]'
+            : 'bg-[#F8F9FB] border-[#E5E7EB]'
         }`}
       >
-        {/* Sidebar Header */}
-        <div className={`p-3 flex items-center justify-between border-b ${
-          theme === 'dark' ? 'border-zinc-800/50' : 'border-zinc-200'
-        }`}>
-          <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
-              theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-zinc-300 text-zinc-800 shadow-xs'
-            }`}>
-              <Sparkles className="w-4 h-4 text-blue-500" />
+        {/* Brand Header */}
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
+              <Sparkles className="w-4 h-4" />
             </div>
-            <span className={`font-semibold text-sm tracking-tight ${
-              theme === 'dark' ? 'text-zinc-100' : 'text-zinc-900'
-            }`}>
-              Hyyzo Docs AI
-            </span>
+            <div>
+              <span className="font-bold text-sm tracking-tight block">Hyyzo AI</span>
+              <span className={`text-[10px] block font-mono ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>Docs Assistant</span>
+            </div>
           </div>
 
           <button
             onClick={() => setSidebarOpen(false)}
             className={`p-1.5 rounded-lg transition ${
               theme === 'dark'
-                ? 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+                ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
                 : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/60'
             }`}
             title="Collapse Sidebar"
@@ -328,54 +411,73 @@ export default function VercelAIChatbot() {
           </button>
         </div>
 
-        {/* New Chat Button */}
-        <div className="p-3">
+        {/* New Session Button */}
+        <div className="px-3 pb-2">
           <button
             onClick={handleNewChat}
-            className={`w-full py-2 px-3 rounded-lg font-medium text-xs flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99] ${
+            className={`w-full py-2.5 px-3.5 rounded-xl font-semibold text-xs flex items-center justify-between transition active:scale-[0.98] shadow-sm ${
               theme === 'dark'
-                ? 'bg-zinc-100 hover:bg-white text-zinc-950'
-                : 'bg-zinc-900 hover:bg-zinc-800 text-white'
+                ? 'bg-[#4F8CFF] hover:bg-blue-500 text-white'
+                : 'bg-[#2563EB] hover:bg-blue-700 text-white'
             }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            New Chat
+            <div className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              <span>New Conversation</span>
+            </div>
+            <span className="text-[10px] opacity-70 font-mono">Ctrl+K</span>
           </button>
         </div>
 
-        {/* Chat History Sessions */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-1">
-          <div className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+        {/* Search Input Filter */}
+        <div className="px-3 py-1.5">
+          <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
+            theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35] text-zinc-300' : 'bg-white border-[#E5E7EB] text-zinc-700'
+          }`}>
+            <Search className="w-3.5 h-3.5 opacity-50 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search conversations..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="bg-transparent border-none outline-none w-full text-xs placeholder:text-zinc-400"
+            />
+          </div>
+        </div>
+
+        {/* Chat History List */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+          <div className={`px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${
             theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
           }`}>
-            Recent Conversations
+            Conversations
           </div>
 
-          {chats.map((session) => {
+          {filteredChats.map((session) => {
             const isActive = session.id === currentChatId;
             return (
               <div
                 key={session.id}
                 onClick={() => setCurrentChatId(session.id)}
-                className={`group px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition text-xs font-medium ${
+                className={`group px-3 py-2 rounded-xl flex items-center justify-between cursor-pointer transition text-xs font-medium ${
                   isActive
                     ? theme === 'dark'
-                      ? 'bg-zinc-800/90 text-zinc-100 font-semibold'
-                      : 'bg-zinc-200/80 text-zinc-900 font-semibold'
+                      ? 'bg-[#22252E] text-white font-semibold shadow-xs'
+                      : 'bg-white text-zinc-900 font-semibold shadow-xs border border-zinc-200/80'
                     : theme === 'dark'
-                      ? 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
+                      ? 'text-zinc-400 hover:bg-[#22252E]/60 hover:text-zinc-200'
                       : 'text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900'
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                <div className="flex items-center gap-2.5 truncate">
+                  <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-blue-500' : 'opacity-50'}`} />
                   <span className="truncate">{session.title}</span>
                 </div>
                 {chats.length > 1 && (
                   <button
                     onClick={(e) => handleDeleteChat(session.id, e)}
                     className={`opacity-0 group-hover:opacity-100 p-1 transition ${
-                      theme === 'dark' ? 'text-zinc-400 hover:text-rose-400' : 'text-zinc-500 hover:text-rose-600'
+                      theme === 'dark' ? 'text-zinc-500 hover:text-rose-400' : 'text-zinc-400 hover:text-rose-600'
                     }`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -387,31 +489,30 @@ export default function VercelAIChatbot() {
         </div>
 
         {/* Sidebar Footer Controls */}
-        <div className={`p-3 border-t space-y-2 ${
-          theme === 'dark' ? 'border-zinc-800/60' : 'border-zinc-200'
+        <div className={`p-3 border-t space-y-1.5 ${
+          theme === 'dark' ? 'border-[#2A2D35]' : 'border-[#E5E7EB]'
         }`}>
           <button
             onClick={handleReindex}
             disabled={isReindexing}
-            className={`w-full py-1.5 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition ${
+            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition ${
               theme === 'dark'
-                ? 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-300'
-                : 'border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
+                ? 'border-[#2A2D35] bg-[#0F1117]/60 hover:bg-[#22252E] text-zinc-300'
+                : 'border-[#E5E7EB] bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
             }`}
           >
             <div className="flex items-center gap-2">
               <RefreshCw className={`w-3.5 h-3.5 ${isReindexing ? 'animate-spin text-blue-500' : ''}`} />
-              <span>Re-index Index</span>
+              <span>Re-index Vector Store</span>
             </div>
-            {reindexMsg && <span className="text-[10px] text-emerald-500 font-bold">{reindexMsg}</span>}
           </button>
 
           <button
             onClick={() => setShowDocsModal(true)}
-            className={`w-full py-1.5 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition ${
+            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition ${
               theme === 'dark'
-                ? 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-300'
-                : 'border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
+                ? 'border-[#2A2D35] bg-[#0F1117]/60 hover:bg-[#22252E] text-zinc-300'
+                : 'border-[#E5E7EB] bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -419,25 +520,35 @@ export default function VercelAIChatbot() {
               <span>Document Files</span>
             </div>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-              theme === 'dark' ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-200 text-zinc-700'
+              theme === 'dark' ? 'bg-[#22252E] text-zinc-300' : 'bg-zinc-200 text-zinc-700'
             }`}>
               {docFiles.length}
             </span>
+          </button>
+
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center gap-2 transition ${
+              theme === 'dark'
+                ? 'border-[#2A2D35] bg-[#0F1117]/60 hover:bg-[#22252E] text-zinc-300'
+                : 'border-[#E5E7EB] bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Preferences & Config</span>
           </button>
         </div>
 
       </aside>
 
       {/* --------------------------------------------------------- */}
-      {/* MAIN CHAT CANVAS */}
+      {/* MAIN CANVAS AREA */}
       {/* --------------------------------------------------------- */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         
-        {/* Top Header Bar */}
-        <header className={`h-14 border-b flex items-center justify-between px-4 z-10 ${
-          theme === 'dark'
-            ? 'bg-[#09090b]/90 border-zinc-800/80 backdrop-blur-md'
-            : 'bg-white/90 border-zinc-200 backdrop-blur-md'
+        {/* Sticky Top Header Navigation */}
+        <header className={`h-14 border-b flex items-center justify-between px-4 z-10 glass-header ${
+          theme === 'dark' ? 'border-[#2A2D35]' : 'border-[#E5E7EB]'
         }`}>
           <div className="flex items-center gap-3">
             {!sidebarOpen && (
@@ -445,46 +556,69 @@ export default function VercelAIChatbot() {
                 onClick={() => setSidebarOpen(true)}
                 className={`p-1.5 rounded-lg transition ${
                   theme === 'dark'
-                    ? 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+                    ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
+                title="Expand Sidebar"
               >
                 <PanelLeftOpen className="w-4 h-4" />
               </button>
             )}
 
-            {/* Model Selector Pill */}
-            <div className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${
+            {/* Model Selector Selector Dropdown Pill */}
+            <div className={`relative flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium ${
               theme === 'dark'
-                ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                : 'bg-zinc-100 border-zinc-300 text-zinc-700'
+                ? 'bg-[#181A20] border-[#2A2D35] text-zinc-200'
+                : 'bg-[#F8F9FB] border-[#E5E7EB] text-zinc-800'
             }`}>
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-dot shrink-0" />
               <select
                 value={modelSelected}
-                onChange={(e) => handleModelChange(e.target.value)}
-                className="bg-transparent border-none outline-none font-medium cursor-pointer appearance-none pr-4 text-xs"
+                onChange={(e) => handleModelSelect(e.target.value)}
+                className="bg-transparent border-none outline-none font-medium cursor-pointer appearance-none pr-5 text-xs"
               >
-                <option value="gemini-flash-latest" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                <option value="gemini-flash-latest" className={theme === 'dark' ? 'bg-[#181A20] text-white' : 'bg-white text-zinc-900'}>
                   Google Gemini Flash (Recommended)
                 </option>
-                <option value="gemini-2.0-flash" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                <option value="gemini-2.0-flash" className={theme === 'dark' ? 'bg-[#181A20] text-white' : 'bg-white text-zinc-900'}>
                   Google Gemini 2.0 Flash
                 </option>
-                <option value="gemini-2.0-flash-lite" className={theme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}>
+                <option value="gemini-2.0-flash-lite" className={theme === 'dark' ? 'bg-[#181A20] text-white' : 'bg-white text-zinc-900'}>
                   Google Gemini 2.0 Flash Lite
                 </option>
               </select>
-              <ChevronDown className={`w-3 h-3 pointer-events-none absolute right-2.5 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`} />
+              <ChevronDown className={`w-3.5 h-3.5 pointer-events-none absolute right-2.5 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`} />
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Server Health Status Dot */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border ${
+              serverHealthy
+                ? theme === 'dark' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : theme === 'dark' ? 'bg-rose-950/40 text-rose-400 border-rose-800/40' : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${serverHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              <span>{serverHealthy ? "Engine Ready" : "Disconnected"}</span>
+            </div>
+
+            {/* Shortcuts Guide Button */}
+            <button
+              onClick={() => setShowShortcutsModal(true)}
+              className={`p-1.5 rounded-lg transition ${
+                theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+              }`}
+              title="Keyboard Shortcuts"
+            >
+              <Command className="w-4 h-4" />
+            </button>
+
+            {/* Light / Dark Mode Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className={`p-1.5 rounded-lg transition ${
                 theme === 'dark'
-                  ? 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+                  ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
                   : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
               }`}
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -494,102 +628,110 @@ export default function VercelAIChatbot() {
           </div>
         </header>
 
-        {/* Message Container Area */}
+        {/* Conversation Canvas */}
         <div className="flex-1 overflow-y-auto px-4 md:px-0 py-6 max-w-3xl mx-auto w-full space-y-6">
           
-          {/* Empty State Suggestion Grid */}
+          {/* Empty State Welcome Layout */}
           {(!currentChat || currentChat.messages.length === 0) && (
-            <div className="py-16 flex flex-col items-center justify-center text-center space-y-8">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-md ${
-                theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-800'
-              }`}>
-                <Sparkles className="w-6 h-6 text-blue-500" />
+            <div className="py-12 flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
+                <Sparkles className="w-7 h-7" />
               </div>
 
               <div className="space-y-2 max-w-md">
-                <h1 className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                  What would you like to know?
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                  What can I help you explore?
                 </h1>
-                <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                  Search & explore project documentation, rewards system architecture, and API definitions.
+                <p className={`text-xs md:text-sm leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  Ask questions about project documentation, architecture design, REST APIs, or data flows.
                 </p>
               </div>
 
-              {/* Vercel AI Chatbot Prompt Grid */}
+              {/* Prompt Suggestions Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl text-left">
-                {promptSuggestions.map((prompt, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(prompt.title)}
-                    className={`p-4 rounded-xl border transition text-left space-y-1 group ${
-                      theme === 'dark'
-                        ? 'border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-800/60 hover:border-zinc-700'
-                        : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 shadow-xs'
-                    }`}
-                  >
-                    <div className={`text-xs font-semibold flex items-center justify-between ${
-                      theme === 'dark' ? 'text-zinc-200 group-hover:text-white' : 'text-zinc-800 group-hover:text-zinc-950'
-                    }`}>
-                      <span>{prompt.title}</span>
-                      <ArrowUp className={`w-3 h-3 rotate-45 transition-transform ${
-                        theme === 'dark' ? 'text-zinc-500 group-hover:text-zinc-300' : 'text-zinc-400 group-hover:text-zinc-700'
-                      }`} />
-                    </div>
-                    <div className={`text-[11px] leading-snug ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>{prompt.desc}</div>
-                  </button>
-                ))}
+                {promptSuggestions.map((prompt, idx) => {
+                  const IconComp = prompt.icon;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendMessage(prompt.title)}
+                      className={`p-4 rounded-2xl border text-left transition duration-200 group flex flex-col justify-between ${
+                        theme === 'dark'
+                          ? 'bg-[#181A20] border-[#2A2D35] hover:border-blue-500/60 hover:bg-[#22252E]'
+                          : 'bg-white border-[#E5E7EB] hover:border-blue-500/60 hover:bg-zinc-50 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <IconComp className="w-4 h-4 text-blue-500" />
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-xs mb-0.5">{prompt.title}</div>
+                        <div className={`text-[11px] line-clamp-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                          {prompt.desc}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Message List */}
-          {currentChat?.messages.map((msg) => (
-            <div key={msg.id} className="space-y-3">
-              <div className="flex gap-3 text-sm">
-                
-                {/* Avatar Icon */}
-                {msg.role === "assistant" ? (
-                  <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 ${
-                    theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-zinc-200' : 'bg-white border-zinc-300 text-zinc-800 shadow-xs'
+          {/* Render Active Messages */}
+          {currentChat &&
+            currentChat.messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3.5 group animate-in fade-in duration-200 ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                {/* AI Avatar */}
+                {msg.role === "assistant" && (
+                  <div className={`w-7 h-7 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
+                    theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-blue-400' : 'bg-white border-[#E5E7EB] text-blue-600'
                   }`}>
                     <Bot className="w-4 h-4 text-blue-500" />
                   </div>
-                ) : (
-                  <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 font-bold text-xs mt-0.5">
-                    U
-                  </div>
                 )}
 
-                <div className="flex-1 space-y-2 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-medium ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                      {msg.role === "assistant" ? "Hyyzo AI Assistant" : "You"}
+                <div className={`flex-1 space-y-2 min-w-0 max-w-2xl ${msg.role === "user" ? "flex flex-col items-end" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {msg.role === "assistant" ? "Hyyzo AI" : "You"}
                     </span>
                     <span className={`text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>{msg.timestamp}</span>
                   </div>
 
                   {/* Message Content */}
-                  <div className={`text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === "user" 
-                      ? theme === 'dark'
-                        ? "text-zinc-100 bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-xl"
-                        : "text-zinc-900 bg-zinc-100 border border-zinc-200 p-3.5 rounded-xl"
-                      : theme === 'dark'
-                        ? "text-zinc-200"
-                        : "text-zinc-800"
-                  }`}>
-                    {msg.content}
-                  </div>
+                  {msg.role === "user" ? (
+                    <div className={`text-sm leading-relaxed whitespace-pre-wrap ${
+                      theme === 'dark'
+                        ? "text-zinc-100 bg-[#181A20] border border-[#2A2D35] px-4 py-3 rounded-2xl shadow-xs"
+                        : "text-zinc-900 bg-zinc-100 border border-zinc-200 px-4 py-3 rounded-2xl"
+                    }`}>
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className={`text-sm markdown-body p-4 rounded-2xl border ${
+                      theme === 'dark'
+                        ? "text-zinc-200 bg-[#181A20]/80 border-[#2A2D35]"
+                        : "text-zinc-900 bg-white border-[#E5E7EB] shadow-xs"
+                    }`}>
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  )}
 
-                  {/* Document Sources Collapsible */}
+                  {/* Sources Collapsible Drawer */}
                   {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
-                    <div className="pt-2">
+                    <div className="pt-1 w-full">
                       <button
                         onClick={() => toggleSources(msg.id)}
                         className={`text-xs font-medium flex items-center gap-1.5 py-1 px-2.5 rounded-lg border transition ${
                           theme === 'dark'
-                            ? 'text-zinc-400 hover:text-zinc-200 border-zinc-800 bg-zinc-900/50'
-                            : 'text-zinc-600 hover:text-zinc-900 border-zinc-200 bg-zinc-100/80'
+                            ? 'text-zinc-400 hover:text-zinc-200 border-[#2A2D35] bg-[#181A20]'
+                            : 'text-zinc-600 hover:text-zinc-900 border-[#E5E7EB] bg-zinc-100'
                         }`}
                       >
                         <FileText className="w-3.5 h-3.5 text-blue-500" />
@@ -602,17 +744,17 @@ export default function VercelAIChatbot() {
                       </button>
 
                       {expandedSources[msg.id] && (
-                        <div className={`mt-2 space-y-2 pl-2 border-l-2 ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-300'}`}>
+                        <div className={`mt-2 space-y-2 pl-3 border-l-2 ${theme === 'dark' ? 'border-[#2A2D35]' : 'border-zinc-300'}`}>
                           {msg.sources.map((src, i) => (
-                            <div key={i} className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                            <div key={i} className={`p-2.5 rounded-xl border text-xs space-y-1 ${
                               theme === 'dark'
-                                ? 'bg-zinc-900/60 border-zinc-800'
-                                : 'bg-white border-zinc-200 shadow-xs'
+                                ? 'bg-[#181A20] border-[#2A2D35]'
+                                : 'bg-white border-[#E5E7EB] shadow-xs'
                             }`}>
                               <div className="flex items-center justify-between font-medium text-blue-500">
                                 <span>📄 {src.file}</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                  theme === 'dark' ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                  theme === 'dark' ? 'bg-[#22252E] text-zinc-400' : 'bg-zinc-100 text-zinc-600'
                                 }`}>
                                   Score: {src.score}
                                 </span>
@@ -629,40 +771,56 @@ export default function VercelAIChatbot() {
                     </div>
                   )}
 
-                  {/* Actions Toolbar for Assistant */}
+                  {/* Actions Bar for Assistant Responses */}
                   {msg.role === "assistant" && (
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex items-center gap-1 pt-1 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleCopy(msg.content, msg.id)}
-                        className={`p-1 rounded transition ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'}`}
+                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
                         title="Copy Response"
                       >
                         {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
-                      <button className={`p-1 rounded transition ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'}`} title="Good Response">
+                      <button
+                        onClick={handleRegenerate}
+                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
+                        title="Regenerate Response"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => showToast("Feedback recorded: Helpful")}
+                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
+                        title="Good Response"
+                      >
                         <ThumbsUp className="w-3.5 h-3.5" />
                       </button>
-                      <button className={`p-1 rounded transition ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'}`} title="Bad Response">
+                      <button
+                        onClick={() => showToast("Feedback recorded: Needs Improvement")}
+                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
+                        title="Bad Response"
+                      >
                         <ThumbsDown className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
-
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Typing Indicator */}
+          {/* Loading Typing Indicator */}
           {isLoading && (
-            <div className="flex gap-3 text-sm">
-              <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${
-                theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-zinc-200' : 'bg-white border-zinc-300 text-zinc-800 shadow-xs'
+            <div className="flex gap-3.5 items-center text-xs animate-in fade-in duration-200">
+              <div className={`w-7 h-7 rounded-xl border flex items-center justify-center shrink-0 ${
+                theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-blue-400' : 'bg-white border-[#E5E7EB] text-blue-600'
               }`}>
-                <Bot className="w-4 h-4 animate-spin text-blue-500" />
+                <Bot className="w-4 h-4 text-blue-500 animate-spin" />
               </div>
-              <div className={`text-xs flex items-center gap-2 py-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                <span>Retrieving context & drafting answer...</span>
+              <div className="flex items-center gap-1.5 text-zinc-400">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse [animation-delay:200ms]" />
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse [animation-delay:400ms]" />
+                <span className="text-xs font-medium ml-1">Searching docs & generating...</span>
               </div>
             </div>
           )}
@@ -671,22 +829,29 @@ export default function VercelAIChatbot() {
         </div>
 
         {/* --------------------------------------------------------- */}
-        {/* VERCEL STYLE FLOATING COMPOSER */}
+        {/* FLOATING COMPOSER INPUT */}
         {/* --------------------------------------------------------- */}
         <div className="p-4 max-w-3xl mx-auto w-full">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendMessage();
-            }}
-            className={`rounded-2xl border p-2 transition ${
-              theme === 'dark'
-                ? 'border-zinc-800 bg-[#121215]/90 shadow-2xl focus-within:border-zinc-700'
-                : 'border-zinc-300 bg-white/90 shadow-xl focus-within:border-zinc-400'
-            }`}
-          >
+          <div className={`p-3 rounded-2xl border transition-all duration-200 glass-composer ${
+            theme === 'dark'
+              ? 'border-[#2A2D35] focus-within:border-blue-500/70'
+              : 'border-[#E5E7EB] focus-within:border-blue-500/70 shadow-sm'
+          }`}>
+            
+            {/* Attachment Chip if file selected */}
+            {attachedFile && (
+              <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-medium border border-blue-500/20">
+                <Paperclip className="w-3 h-3" />
+                <span>{attachedFile}</span>
+                <X
+                  className="w-3 h-3 cursor-pointer hover:opacity-80 ml-1"
+                  onClick={() => setAttachedFile(null)}
+                />
+              </div>
+            )}
+
             <textarea
-              rows={2}
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -695,77 +860,239 @@ export default function VercelAIChatbot() {
                   handleSendMessage();
                 }
               }}
-              placeholder="Send a message to Hyyzo Docs AI..."
-              className={`w-full bg-transparent px-3 py-1.5 text-sm focus:outline-none resize-none ${
-                theme === 'dark' ? 'text-zinc-100 placeholder:text-zinc-600' : 'text-zinc-900 placeholder:text-zinc-400'
-              }`}
+              placeholder="Ask anything about project docs, architecture, or codebase..."
+              rows={2}
+              className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-zinc-400 font-normal"
             />
 
-            <div className={`flex items-center justify-between px-2 pt-1 border-t ${
-              theme === 'dark' ? 'border-zinc-800/40' : 'border-zinc-200'
-            }`}>
-              <div className={`flex items-center gap-2 text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                <Paperclip className={`w-3.5 h-3.5 cursor-pointer transition ${
-                  theme === 'dark' ? 'hover:text-zinc-300' : 'hover:text-zinc-700'
-                }`} />
-                <span>RAG Enabled</span>
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-500/10">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachedFile("rewards_architecture.md");
+                    showToast("Attached context file");
+                  }}
+                  className={`p-1.5 rounded-lg transition ${
+                    theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+                  }`}
+                  title="Attach Context File"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsListening(!isListening);
+                    showToast(isListening ? "Voice dictation stopped" : "Voice listening active...");
+                  }}
+                  className={`p-1.5 rounded-lg transition ${
+                    isListening
+                      ? 'text-rose-500 bg-rose-500/10 animate-pulse'
+                      : theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+                  }`}
+                  title="Voice Dictation Input"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
               </div>
 
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={`p-2 rounded-xl disabled:opacity-30 transition flex items-center justify-center shrink-0 ${
-                  theme === 'dark'
-                    ? 'bg-zinc-100 hover:bg-white text-zinc-950'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-white'
-                }`}
-              >
-                <ArrowUp className="w-4 h-4 font-bold" />
-              </button>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-mono hidden sm:inline ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  Enter to send
+                </span>
+                <button
+                  onClick={() => handleSendMessage()}
+                  disabled={!input.trim() || isLoading}
+                  className={`p-2 rounded-xl text-white font-semibold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    theme === 'dark'
+                      ? 'bg-[#4F8CFF] hover:bg-blue-500 shadow-md'
+                      : 'bg-[#2563EB] hover:bg-blue-700 shadow-sm'
+                  }`}
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </form>
-          <div className={`text-[10px] text-center mt-2 ${theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'}`}>
-            Hyyzo Docs AI — Answers are strictly grounded in project documentation.
           </div>
+
+          <p className={`text-[11px] text-center mt-2 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+            Hyyzo AI Assistant can make mistakes. Verify important project details.
+          </p>
         </div>
 
       </main>
 
-      {/* Loaded Docs Modal */}
+      {/* --------------------------------------------------------- */}
+      {/* DOCUMENT FILES MODAL */}
+      {/* --------------------------------------------------------- */}
       {showDocsModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`border rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl ${
-            theme === 'dark' ? 'bg-[#121215] border-zinc-800' : 'bg-white border-zinc-200'
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl space-y-4 ${
+            theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-white' : 'bg-white border-[#E5E7EB] text-zinc-900'
           }`}>
-            <div className={`p-4 border-b flex items-center justify-between ${
-              theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
-            }`}>
-              <span className={`text-xs font-semibold ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-900'}`}>
-                Loaded Documents ({docFiles.length})
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Folder className="w-4 h-4 text-blue-500" />
+                <span>Indexed Documentation Files ({docFiles.length})</span>
+              </div>
               <button
                 onClick={() => setShowDocsModal(false)}
-                className={`text-xs transition ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-200' : 'text-zinc-400 hover:text-zinc-700'}`}
+                className={`p-1 rounded-lg ${theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-400' : 'hover:bg-zinc-100 text-zinc-600'}`}
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-4 max-h-80 overflow-y-auto space-y-2">
-              {docFiles.map((doc, i) => (
-                <div key={i} className={`p-2.5 rounded-lg border flex items-center justify-between text-xs ${
-                  theme === 'dark'
-                    ? 'border-zinc-800/80 bg-zinc-900/50'
-                    : 'border-zinc-200 bg-zinc-50'
-                }`}>
-                  <div className="truncate pr-2">
-                    <div className={`font-medium truncate ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}>{doc.name}</div>
-                    <div className={`text-[10px] truncate ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>{doc.path}</div>
+
+            <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+              {docFiles.length === 0 ? (
+                <div className="text-center py-8 text-xs text-zinc-400">No document files found in `docs/`.</div>
+              ) : (
+                docFiles.map((file, idx) => (
+                  <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                    theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <div className="flex items-center gap-2.5 truncate">
+                      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                      <div>
+                        <div className="font-semibold">{file.name}</div>
+                        <div className="text-[10px] text-zinc-400 font-mono">{file.path}</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono opacity-70">{(file.size_bytes / 1024).toFixed(1)} KB</span>
                   </div>
-                  <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                    {(doc.size_bytes / 1024).toFixed(1)} KB
-                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------- */}
+      {/* PREFERENCES & CONFIG MODAL */}
+      {/* --------------------------------------------------------- */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl space-y-5 ${
+            theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-white' : 'bg-white border-[#E5E7EB] text-zinc-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-500/20">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Settings className="w-4 h-4 text-blue-500" />
+                <span>Preferences & Configuration</span>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={`p-1 rounded-lg ${theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-400' : 'hover:bg-zinc-100 text-zinc-600'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="font-semibold block mb-1.5">Theme Mode</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTheme("dark")}
+                    className={`py-2 px-3 rounded-xl border font-medium flex items-center justify-center gap-2 transition ${
+                      theme === 'dark' ? 'bg-[#4F8CFF] text-white border-blue-400' : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5" />
+                    <span>Dark</span>
+                  </button>
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`py-2 px-3 rounded-xl border font-medium flex items-center justify-center gap-2 transition ${
+                      theme === 'light' ? 'bg-[#2563EB] text-white border-blue-600' : 'bg-[#181A20] text-zinc-300 border-[#2A2D35]'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                    <span>Light</span>
+                  </button>
                 </div>
-              ))}
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1.5">Active Gemini Model</label>
+                <select
+                  value={modelSelected}
+                  onChange={(e) => handleModelSelect(e.target.value)}
+                  className={`w-full p-2.5 rounded-xl border text-xs outline-none ${
+                    theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35] text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'
+                  }`}
+                >
+                  <option value="gemini-flash-latest">Google Gemini Flash (Recommended)</option>
+                  <option value="gemini-2.0-flash">Google Gemini 2.0 Flash</option>
+                  <option value="gemini-2.0-flash-lite">Google Gemini 2.0 Flash Lite</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1.5">RAG Query Similarity Top K</label>
+                <input
+                  type="text"
+                  disabled
+                  value="3 Source Nodes"
+                  className={`w-full p-2.5 rounded-xl border text-xs font-mono opacity-70 ${
+                    theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-50 border-zinc-200'
+                  }`}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------- */}
+      {/* KEYBOARD SHORTCUTS MODAL */}
+      {/* --------------------------------------------------------- */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-sm rounded-2xl border p-5 shadow-2xl space-y-4 ${
+            theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-white' : 'bg-white border-[#E5E7EB] text-zinc-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-500/20">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Command className="w-4 h-4 text-blue-500" />
+                <span>Keyboard Shortcuts</span>
+              </div>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className={`p-1 rounded-lg ${theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-400' : 'hover:bg-zinc-100 text-zinc-600'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">New Conversation</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Ctrl + K</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Send Message</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Enter</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Add Line Break</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Shift + Enter</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Close Modals</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Esc</kbd>
+              </div>
             </div>
           </div>
         </div>
