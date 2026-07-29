@@ -59,9 +59,11 @@ As codebases and technical documentation grow, searching manually for specific f
 1. **Document Loader (`src/loader.py`)**: Uses `SimpleDirectoryReader` from LlamaIndex to parse files inside `docs/`.
 2. **AI Model Config (`src/config.py` & `src/engine.py`)**: Configures the LLM (`gemini-2.0-flash`) and Embedding Model (`text-embedding-004`) using `GOOGLE_API_KEY`.
 3. **Vector Index Engine (`src/engine.py`)**: Builds a `VectorStoreIndex` from loaded documents and handles persistent storage inside `storage/`.
-4. **User Interfaces**:
-   - **CLI Mode (`main.py`)**: A command-line chat loop.
-   - **Streamlit Web UI (`app.py`)**: A web interface featuring custom CSS glassmorphism, multi-chat session history in the sidebar, and quick starter prompts.
+4. **User Interfaces & Backend API**:
+   - **Next.js Web UI (`frontend/`)**: A modern React/Next.js 15 web application with glassmorphism styling, multi-chat session sidebar, loaded docs viewer, and document source citations.
+   - **FastAPI RAG Server (`server.py`)**: REST API backend connecting Next.js to the LlamaIndex query engine (`/api/query`, `/api/reindex`, `/api/docs-list`).
+   - **Streamlit Web UI (`app.py`)**: A Streamlit web interface for quick Python browser access.
+   - **CLI Mode (`main.py`)**: A command-line chat loop inside terminal.
 
 ---
 
@@ -76,8 +78,15 @@ hyyzo_docs_ai/
 ├── README.md             # Project README documentation
 ├── requirements.txt      # Python dependencies list
 │
+├── server.py             # FastAPI REST API Server (Backend for Next.js)
 ├── app.py                # Streamlit Web Application entry point
 ├── main.py               # CLI Terminal Chat entry point
+│
+├── frontend/             # Next.js 15 Web Application UI (React + Tailwind CSS)
+│   ├── src/app/
+│   │   ├── page.tsx      # Main Next.js RAG Chat Interface
+│   │   └── globals.css   # Custom CSS & glassmorphism theme
+│   └── package.json
 │
 ├── docs/                 # Knowledge Base Folder (Markdown & Text documents)
 │   ├── about_hyyzo.md
@@ -105,9 +114,11 @@ hyyzo_docs_ai/
 ```
 
 ### Purpose of Key Folders & Files
-- **`app.py`**: Web interface powered by Streamlit. Contains session history, sidebar controls, CSS styling, and user chat UI.
-- **`main.py`**: Command-line application. Allows querying the AI directly inside a terminal.
-- **`docs/`**: The knowledge base directory. Drop any `.md` or `.txt` file here for the AI to read.
+- **`frontend/`**: Modern Next.js web interface featuring chat sessions, markdown responses, document citations, and dark mode.
+- **`server.py`**: FastAPI backend server exposing `/api/query`, `/api/reindex`, and `/api/docs-list` endpoints for Next.js.
+- **`app.py`**: Streamlit web interface for single-command Python UI.
+- **`main.py`**: Command-line application to query the AI directly inside terminal.
+- **`docs/`**: Knowledge base directory. Drop any `.md` or `.txt` file here for the AI to read.
 - **`src/config.py`**: Reads `.env` variables (e.g., API keys, model names, chunk sizes).
 - **`src/engine.py`**: Initializes Gemini models, creates or loads vector indexes from `storage/`, and returns the RAG query engine.
 - **`src/loader.py`**: Recursively scans and loads files from `docs/`.
