@@ -260,8 +260,42 @@ CUSTOM_CSS = f"""
         transform: translateY(-3px) scale(1.005) !important;
     }}
 
-    /* Suppress all Streamlit default UI chrome, headers, toolbars, and loading ghosts */
-    #MainMenu, footer, header, [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], .stDeployButton, [data-testid="stStatusWidget"] {{
+    /* Clean transparent header maintaining sidebar reopen control */
+    [data-testid="stHeader"] {{
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        z-index: 99 !important;
+    }}
+
+    /* Beautiful 3D Glassmorphic Sidebar Re-open Control Button */
+    [data-testid="stSidebarCollapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 100 !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"] button {{
+        background: rgba(20, 24, 33, 0.85) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 12px !important;
+        color: #F3F4F6 !important;
+        padding: 6px !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+        transition: all 0.2s ease !important;
+    }}
+    [data-testid="stSidebarCollapsedControl"] button:hover {{
+        background: rgba(30, 36, 50, 0.95) !important;
+        border-color: rgba(96, 165, 250, 0.5) !important;
+        color: #60A5FA !important;
+        transform: scale(1.08) !important;
+    }}
+
+    /* Suppress unnecessary Streamlit default UI chrome */
+    #MainMenu, footer, .stDeployButton, [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0 !important;
