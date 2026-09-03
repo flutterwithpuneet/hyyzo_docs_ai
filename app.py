@@ -24,8 +24,17 @@ st.set_page_config(
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if "auth_mode" not in st.session_state:
+    st.session_state.auth_mode = "login"
+
 if "user_name" not in st.session_state:
-    st.session_state.user_name = "Puneet"
+    st.session_state.user_name = "Puneet Sharma"
 
 # ---------------------------------------------------------
 # 2. Minimalist & Clean Design System
@@ -326,7 +335,194 @@ except Exception as e:
     st.stop()
 
 # ---------------------------------------------------------
-# 4. Session State Management
+# 4. Authentication Gate
+# ---------------------------------------------------------
+if not st.session_state.authenticated:
+    # Dedicated login styles to hide sidebar and center the card with 3D glassmorphism
+    LOGIN_CSS = f"""
+    <style>
+        [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {{
+            display: none !important;
+        }}
+        .block-container {{
+            max-width: 480px !important;
+            padding-top: 5vh !important;
+            padding-bottom: 2rem !important;
+        }}
+        .auth-card {{
+            background: {"rgba(20, 24, 33, 0.75)" if is_dark else "rgba(255, 255, 255, 0.85)"};
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid {"rgba(255, 255, 255, 0.1)" if is_dark else "rgba(0, 0, 0, 0.08)"};
+            border-radius: 24px;
+            padding: 32px 28px;
+            box-shadow: 0 20px 60px {"rgba(0, 0, 0, 0.6)" if is_dark else "rgba(0, 0, 0, 0.08)"},
+                        0 0 0 1px {"rgba(255, 255, 255, 0.05)" if is_dark else "rgba(255, 255, 255, 0.8)"} inset;
+            margin-bottom: 24px;
+        }}
+        .auth-logo-badge {{
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.2));
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px auto;
+            font-size: 1.4rem;
+            color: #60A5FA;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+        }}
+        .auth-title {{
+            font-size: 1.6rem;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #FFFFFF 20%, #93C5FD 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }}
+        .auth-subtitle {{
+            font-size: 0.88rem;
+            color: {TEXT_MUTED};
+            text-align: center;
+            margin-bottom: 24px;
+        }}
+        .auth-feature-pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: {TEXT_MUTED};
+            padding: 4px 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }}
+        /* Tab list styling */
+        [data-baseweb="tab-list"] {{
+            background: {"rgba(255, 255, 255, 0.04)" if is_dark else "rgba(0, 0, 0, 0.04)"} !important;
+            border-radius: 12px !important;
+            padding: 4px !important;
+            gap: 4px !important;
+            border: 1px solid {BORDER_COLOR} !important;
+            margin-bottom: 16px !important;
+        }}
+        [data-baseweb="tab"] {{
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 0.85rem !important;
+            color: {TEXT_MUTED} !important;
+            border: none !important;
+            padding: 6px 14px !important;
+            transition: all 0.2s ease !important;
+        }}
+        [aria-selected="true"] {{
+            background: {"rgba(59, 130, 246, 0.2)" if is_dark else "rgba(255, 255, 255, 1)"} !important;
+            color: {"#60A5FA" if is_dark else "#2563EB"} !important;
+        }}
+        /* Submit Buttons */
+        .stFormSubmitButton>button {{
+            background: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%) !important;
+            color: #FFFFFF !important;
+            border: 1px solid rgba(96, 165, 250, 0.4) !important;
+            font-weight: 600 !important;
+            font-size: 0.92rem !important;
+            padding: 10px 16px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35) !important;
+            transition: all 0.2s ease !important;
+        }}
+        .stFormSubmitButton>button:hover {{
+            background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%) !important;
+            box-shadow: 0 6px 22px rgba(37, 99, 235, 0.5) !important;
+            transform: translateY(-1px) !important;
+        }}
+    </style>
+    """
+    st.markdown(LOGIN_CSS, unsafe_allow_html=True)
+
+    # Top Brand Header
+    st.markdown(
+        f"""
+        <div class="auth-logo-badge">✦</div>
+        <div class="auth-title">Hyyzo Docs AI</div>
+        <div class="auth-subtitle">Sign in to access document-grounded intelligence</div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    auth_tab1, auth_tab2 = st.tabs(["Sign In", "Create Account"])
+
+    with auth_tab1:
+        with st.form("signin_form", clear_on_submit=False):
+            login_email = st.text_input("Work Email", placeholder="name@hyyzo.com")
+            login_password = st.text_input("Password", type="password", placeholder="••••••••")
+            st.write("")
+            submit_login = st.form_submit_button("Sign In →", use_container_width=True)
+
+            if submit_login:
+                if login_email and login_password:
+                    st.session_state.authenticated = True
+                    st.session_state.user_name = login_email.split("@")[0].replace(".", " ").title()
+                    st.session_state.user = {"email": login_email, "name": st.session_state.user_name}
+                    st.rerun()
+                else:
+                    st.error("Please enter both email and password.")
+
+    with auth_tab2:
+        with st.form("signup_form", clear_on_submit=False):
+            signup_name = st.text_input("Full Name", placeholder="Puneet Sharma")
+            signup_email = st.text_input("Work Email", placeholder="name@hyyzo.com")
+            signup_password = st.text_input("Create Password", type="password", placeholder="At least 6 characters")
+            st.write("")
+            submit_signup = st.form_submit_button("Create Account →", use_container_width=True)
+
+            if submit_signup:
+                if signup_email and signup_password:
+                    st.session_state.authenticated = True
+                    st.session_state.user_name = signup_name or signup_email.split("@")[0].title()
+                    st.session_state.user = {"email": signup_email, "name": st.session_state.user_name}
+                    st.rerun()
+                else:
+                    st.error("Please fill in all required fields.")
+
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; margin: 18px 0; color: {TEXT_MUTED}; font-size: 0.75rem; font-weight: 600;">
+            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
+            <span style="padding: 0 12px; letter-spacing: 0.5px;">OR</span>
+            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    if st.button("⚡ Continue with Quick Demo Sign-In", use_container_width=True):
+        st.session_state.authenticated = True
+        st.session_state.user_name = "Puneet Sharma"
+        st.session_state.user = {"email": "puneet@hyyzo.com", "name": "Puneet Sharma"}
+        st.rerun()
+
+    # Minimalist Trust Pills
+    st.markdown(
+        f"""
+        <div style="display: flex; justify-content: center; gap: 8px; margin-top: 28px; flex-wrap: wrap;">
+            <span class="auth-feature-pill">🔒 Local Grounding</span>
+            <span class="auth-feature-pill">⚡ Gemini 2.0 Flash</span>
+            <span class="auth-feature-pill">📚 Knowledge RAG</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.stop()
+
+# ---------------------------------------------------------
+# 5. Session State Management
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
     default_id = str(uuid.uuid4())[:8]
@@ -346,7 +542,7 @@ current_chat_id = st.session_state.current_chat_id
 current_chat = st.session_state.chats[current_chat_id]
 
 # ---------------------------------------------------------
-# 5. Clean & Meaningful Sidebar
+# 6. Clean & Meaningful Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
     st.markdown(
@@ -373,10 +569,15 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    with st.expander("👤 Settings & Name", expanded=False):
+    with st.expander("👤 Settings & Profile", expanded=False):
         new_name = st.text_input("Your Name", value=st.session_state.user_name)
         if new_name != st.session_state.user_name:
             st.session_state.user_name = new_name
+            st.rerun()
+        
+        if st.button("🚪 Sign Out", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user = None
             st.rerun()
 
     # New Chat Button

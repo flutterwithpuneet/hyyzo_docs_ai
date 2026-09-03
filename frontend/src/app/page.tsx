@@ -38,8 +38,11 @@ import {
   Layers,
   Code2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  LogOut
 } from "lucide-react";
+import VercelLogin, { AuthUser } from "@/components/VercelLogin";
+import { auth, fbSignOut, onAuthStateChanged } from "@/lib/firebase";
 
 interface Message {
   id: string;
@@ -76,6 +79,8 @@ const INITIAL_DEFAULT_CHAT: ChatSession = {
 };
 
 export default function WorldClassAIAssistant() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [chats, setChats] = useState<ChatSession[]>([INITIAL_DEFAULT_CHAT]);
   const [currentChatId, setCurrentChatId] = useState<string>("session-default");
   const [input, setInput] = useState("");
@@ -98,6 +103,52 @@ export default function WorldClassAIAssistant() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load auth state and Firebase listener
+  useEffect(() => {
+    const savedUser = localStorage.getItem("hyyzo_auth_user");
+    if (savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error("Local auth parsing error:", e);
+      }
+    }
+
+    let unsubscribe = () => {};
+    if (auth) {
+      unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+        if (fbUser) {
+          const authUser: AuthUser = {
+            uid: fbUser.uid,
+            email: fbUser.email,
+            displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
+            photoURL: fbUser.photoURL
+          };
+          setCurrentUser(authUser);
+          localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
+        }
+        setAuthInitialized(true);
+      });
+    } else {
+      setAuthInitialized(true);
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    if (auth) {
+      try {
+        await fbSignOut(auth);
+      } catch (e) {
+        console.error("Sign out error:", e);
+      }
+    }
+    localStorage.removeItem("hyyzo_auth_user");
+    setCurrentUser(null);
+    showToast("Signed out successfully");
+  };
 
   // Sync theme with localStorage
   useEffect(() => {
@@ -368,6 +419,22 @@ export default function WorldClassAIAssistant() {
     c.title.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
+  if (!currentUser && authInitialized) {
+    return (
+      <VercelLogin
+        onLoginSuccess={(u) => {
+          setCurrentUser(u);
+          showToast(`Welcome back, ${u.displayName || "User"}`);
+        }}
+        theme={theme}
+      />
+    );
+  }
+
+  const userInitials = currentUser?.displayName
+    ? currentUser.displayName.substring(0, 2).toUpperCase()
+    : currentUser?.email?.substring(0, 2).toUpperCase() || "HY";
+
   return (
     <div className={`flex h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-[#0F1117] text-[#F3F4F6]' : 'bg-[#FFFFFF] text-[#111827]'}`}>
       
@@ -392,7 +459,7 @@ export default function WorldClassAIAssistant() {
         }`}
       >
         {/* Brand Header */}
-        <div className="p-4 flex items-center justify-between">
+        <div className="p-4 pb-2 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
               <Sparkles className="w-4 h-4" />
@@ -415,6 +482,39 @@ export default function WorldClassAIAssistant() {
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
+
+        {/* User Profile Card with Sign Out */}
+        {currentUser && (
+          <div className="px-3 py-2">
+            <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
+              theme === 'dark' ? 'bg-[#14161E] border-[#2A2D35]' : 'bg-white border-[#E5E7EB] shadow-xs'
+            }`}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm">
+                  {userInitials}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold truncate leading-tight">
+                    {currentUser.displayName || "Hyyzo Member"}
+                  </div>
+                  <div className={`text-[10px] truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    {currentUser.email || "Authenticated"}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSignOut}
+                className={`p-1.5 rounded-lg transition shrink-0 ${
+                  theme === 'dark' ? 'text-zinc-400 hover:text-rose-400 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-rose-600 hover:bg-zinc-100'
+                }`}
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* New Session Button */}
         <div className="px-3 pb-2">
