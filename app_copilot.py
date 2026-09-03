@@ -169,8 +169,13 @@ EXACT_COPILOT_CSS = f"""
         border-color: {ACCENT_BLUE} !important;
     }}
 
-    #MainMenu, footer, header {{
-        visibility: hidden;
+    /* Suppress all Streamlit default UI chrome, headers, toolbars, and loading ghosts */
+    #MainMenu, footer, header, [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], .stDeployButton, [data-testid="stStatusWidget"] {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }}
 </style>
 """

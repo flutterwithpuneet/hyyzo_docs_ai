@@ -68,9 +68,16 @@ interface DocFile {
   size_bytes: number;
 }
 
+const INITIAL_DEFAULT_CHAT: ChatSession = {
+  id: "session-default",
+  title: "New Session",
+  messages: [],
+  createdAt: "Just now"
+};
+
 export default function WorldClassAIAssistant() {
-  const [chats, setChats] = useState<ChatSession[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string>("");
+  const [chats, setChats] = useState<ChatSession[]>([INITIAL_DEFAULT_CHAT]);
+  const [currentChatId, setCurrentChatId] = useState<string>("session-default");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -92,37 +99,35 @@ export default function WorldClassAIAssistant() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load theme and saved state
+  // Sync theme with localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem("hyyzo-theme") as "dark" | "light" | null;
-    if (savedTheme) {
+    if (savedTheme && (savedTheme === "dark" || savedTheme === "light")) {
       setTheme(savedTheme);
-    } else {
-      setTheme("dark");
+      if (savedTheme === "dark") {
+        document.documentElement.classList.add("dark");
+        document.documentElement.classList.remove("light");
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.classList.add("light");
+      }
     }
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("hyyzo-theme", theme);
-    if (theme === "dark") {
+  const handleSetTheme = (newTheme: "dark" | "light") => {
+    setTheme(newTheme);
+    localStorage.setItem("hyyzo-theme", newTheme);
+    if (newTheme === "dark") {
       document.documentElement.classList.add("dark");
+      document.documentElement.classList.remove("light");
     } else {
       document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
     }
-  }, [theme]);
+  };
 
-  // Initial chat setup & health check
+  // Initial server connection checks
   useEffect(() => {
-    const defaultChatId = Math.random().toString(36).substring(2, 9);
-    const initialSession: ChatSession = {
-      id: defaultChatId,
-      title: "New Session",
-      messages: [],
-      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setChats([initialSession]);
-    setCurrentChatId(defaultChatId);
-
     checkHealth();
     fetchDocsList();
   }, []);
@@ -545,6 +550,7 @@ export default function WorldClassAIAssistant() {
       {/* MAIN CANVAS AREA */}
       {/* --------------------------------------------------------- */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <div className="gemini-ambient-glow" />
         
         {/* Sticky Top Header Navigation */}
         <header className={`h-14 border-b flex items-center justify-between px-4 z-10 glass-header ${
@@ -615,7 +621,7 @@ export default function WorldClassAIAssistant() {
 
             {/* Light / Dark Mode Toggle */}
             <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={() => handleSetTheme(theme === 'dark' ? 'light' : 'dark')}
               className={`p-1.5 rounded-lg transition ${
                 theme === 'dark'
                   ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
@@ -832,10 +838,10 @@ export default function WorldClassAIAssistant() {
         {/* FLOATING COMPOSER INPUT */}
         {/* --------------------------------------------------------- */}
         <div className="p-4 max-w-3xl mx-auto w-full">
-          <div className={`p-3 rounded-2xl border transition-all duration-200 glass-composer ${
+          <div className={`p-3 gemini-glass-composer transition-all duration-300 ${
             theme === 'dark'
-              ? 'border-[#2A2D35] focus-within:border-blue-500/70'
-              : 'border-[#E5E7EB] focus-within:border-blue-500/70 shadow-sm'
+              ? 'border-white/10'
+              : 'border-zinc-200 shadow-sm'
           }`}>
             
             {/* Attachment Chip if file selected */}
@@ -995,7 +1001,7 @@ export default function WorldClassAIAssistant() {
                 <label className="font-semibold block mb-1.5">Theme Mode</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setTheme("dark")}
+                    onClick={() => handleSetTheme("dark")}
                     className={`py-2 px-3 rounded-xl border font-medium flex items-center justify-center gap-2 transition ${
                       theme === 'dark' ? 'bg-[#4F8CFF] text-white border-blue-400' : 'bg-zinc-100 text-zinc-700 border-zinc-200'
                     }`}
@@ -1004,7 +1010,7 @@ export default function WorldClassAIAssistant() {
                     <span>Dark</span>
                   </button>
                   <button
-                    onClick={() => setTheme("light")}
+                    onClick={() => handleSetTheme("light")}
                     className={`py-2 px-3 rounded-xl border font-medium flex items-center justify-center gap-2 transition ${
                       theme === 'light' ? 'bg-[#2563EB] text-white border-blue-600' : 'bg-[#181A20] text-zinc-300 border-[#2A2D35]'
                     }`}

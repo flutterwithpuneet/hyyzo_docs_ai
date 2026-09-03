@@ -12,10 +12,16 @@ from llama_index.embeddings.gemini import GeminiEmbedding
 from src.config import GOOGLE_API_KEY, LLM_MODEL, EMBEDDING_MODEL, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
 
+import time
+
 def setup_models():
     """Configure Gemini LLM and embedding model globally."""
     Settings.llm = Gemini(api_key=GOOGLE_API_KEY, model=LLM_MODEL)
-    Settings.embed_model = GeminiEmbedding(api_key=GOOGLE_API_KEY, model_name=EMBEDDING_MODEL)
+    Settings.embed_model = GeminiEmbedding(
+        api_key=GOOGLE_API_KEY,
+        model_name=EMBEDDING_MODEL,
+        embed_batch_size=5
+    )
     Settings.chunk_size = CHUNK_SIZE
     Settings.chunk_overlap = CHUNK_OVERLAP
     print(f"[OK] Models configured: LLM={LLM_MODEL}, Embed={EMBEDDING_MODEL}")
@@ -31,16 +37,22 @@ def set_active_llm(model_name: str):
     print(f"[OK] LLM updated to: {formatted_name}")
 
 
-def build_index(documents):
-    """Create a vector index from documents and save to disk."""
-    index = VectorStoreIndex.from_documents(documents)
-
-    # Save to disk
-    INDEX_DIR.mkdir(parents=True, exist_ok=True)
-    index.storage_context.persist(persist_dir=str(INDEX_DIR))
-    print(f"[OK] Index saved to {INDEX_DIR}")
-
-    return index
+def build_index(documents, max_retries=3):
+    """Create a vector index from documents and save to disk with rate-limit retries."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            index = VectorStoreIndex.from_documents(documents, show_progress=True)
+            INDEX_DIR.mkdir(parents=True, exist_ok=True)
+            index.storage_context.persist(persist_dir=str(INDEX_DIR))
+            print(f"[OK] Index saved to {INDEX_DIR}")
+            return index
+        except Exception as e:
+            if ("ResourceExhausted" in str(e) or "429" in str(e) or "Quota" in str(e)) and attempt < max_retries:
+                wait_time = attempt * 20
+                print(f"[WARN] Gemini Rate limit hit. Waiting {wait_time}s before retry ({attempt}/{max_retries})...")
+                time.sleep(wait_time)
+            else:
+                raise e
 
 
 def load_index():

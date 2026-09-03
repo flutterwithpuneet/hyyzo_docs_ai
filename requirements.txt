@@ -1,10 +1,6 @@
 # hyyzo_docs_ai - Requirements
 pillow>=10.4.0
-llama-index-core
-llama-index-readers-file
-llama-index-llms-gemini
-llama-index-embeddings-gemini
-python-dotenv
+   
 streamlit
 fastapi
 uvicorn

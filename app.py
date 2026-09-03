@@ -116,19 +116,76 @@ CUSTOM_CSS = f"""
         color: {ACCENT_BLUE} !important;
     }}
 
-    /* Clean Hero Section */
-    .hero-title {{
-        font-size: 2.2rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        margin-top: 1.5rem;
-        margin-bottom: 0.5rem;
-        color: {TEXT_PRIMARY};
+    /* Ambient Background Gemini Aurora Glow */
+    .stApp::before {{
+        content: "";
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 650px;
+        height: 450px;
+        background: radial-gradient(
+            ellipse 80% 60% at 50% 50%,
+            rgba(59, 130, 246, 0.12) 0%,
+            rgba(139, 92, 246, 0.08) 45%,
+            transparent 75%
+        );
+        filter: blur(65px);
+        pointer-events: none;
+        z-index: 0;
+        animation: geminiAmbientPulse 9s ease-in-out infinite alternate;
     }}
+
+    @keyframes geminiAmbientPulse {{
+        0% {{ transform: translate(-50%, -50%) scale(0.95); opacity: 0.7; }}
+        100% {{ transform: translate(-50%, -50%) scale(1.1); opacity: 1; }}
+    }}
+
+    /* Clean Hero Section with Gemini Gradient Typography */
+    .hero-title {{
+        font-size: 2.4rem;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        margin-top: 1.8rem;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, #FFFFFF 20%, #93C5FD 65%, #C4B5FD 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: heroFloat 5s ease-in-out infinite alternate;
+    }}
+
+    @keyframes heroFloat {{
+        0% {{ transform: translateY(0px); }}
+        100% {{ transform: translateY(-3px); }}
+    }}
+
     .hero-subtitle {{
         color: {TEXT_MUTED};
         font-size: 1.05rem;
         margin-bottom: 2rem;
+    }}
+
+    /* 3D Glassmorphic Quick Action Cards */
+    .stButton>button {{
+        border-radius: 14px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(26, 30, 38, 0.7) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        color: {TEXT_PRIMARY} !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        padding: 10px 16px !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.03) inset !important;
+    }}
+    .stButton>button:hover {{
+        border-color: rgba(96, 165, 250, 0.45) !important;
+        color: #FFFFFF !important;
+        background: rgba(36, 42, 54, 0.85) !important;
+        transform: translateY(-2px) scale(1.01) !important;
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(96, 165, 250, 0.3) inset !important;
     }}
 
     /* Clean Source Tag Pills */
@@ -136,27 +193,80 @@ CUSTOM_CSS = f"""
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        background-color: {CARD_BG};
-        border: 1px solid {BORDER_COLOR};
-        color: {ACCENT_BLUE};
-        padding: 4px 10px;
-        border-radius: 8px;
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(96, 165, 250, 0.2);
+        color: #60A5FA;
+        padding: 5px 12px;
+        border-radius: 10px;
         font-size: 0.78rem;
         font-weight: 500;
         margin: 6px 6px 0 0;
+        transition: all 0.2s ease;
+    }}
+    .source-tag:hover {{
+        border-color: #60A5FA;
+        background: rgba(37, 99, 235, 0.15);
     }}
 
-    /* Floating Chat Composer */
+    /* === SIGNATURE GEMINI 3D GLASSMORPHIC CHAT COMPOSER WITH LIQUID UNDERGLOW === */
     [data-testid="stChatInput"] {{
-        border-radius: 16px !important;
-        border: 1px solid {BORDER_COLOR} !important;
-        background-color: {SURFACE_SIDEBAR} !important;
+        position: relative !important;
+        border-radius: 26px !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        background: rgba(18, 21, 30, 0.75) !important;
+        backdrop-filter: blur(28px) saturate(190%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
         color: {TEXT_PRIMARY} !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+        box-shadow:
+            0 0 35px 2px rgba(59, 130, 246, 0.28),
+            0 14px 44px rgba(0, 0, 0, 0.6),
+            0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        animation: geminiComposerGlow 7.5s ease-in-out infinite alternate !important;
     }}
 
-    #MainMenu, footer, header {{
-        visibility: hidden;
+    @keyframes geminiComposerGlow {{
+        0% {{
+            box-shadow:
+                0 0 28px 2px rgba(59, 130, 246, 0.22),
+                0 12px 38px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+            transform: translateY(0px);
+        }}
+        50% {{
+            box-shadow:
+                0 0 45px 6px rgba(96, 165, 250, 0.36),
+                0 16px 48px rgba(0, 0, 0, 0.7),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            transform: translateY(-2px);
+        }}
+        100% {{
+            box-shadow:
+                0 0 35px 3px rgba(139, 92, 246, 0.3),
+                0 14px 42px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+            transform: translateY(1px);
+        }}
+    }}
+
+    [data-testid="stChatInput"]:focus-within {{
+        background: rgba(22, 26, 38, 0.9) !important;
+        border-color: rgba(96, 165, 250, 0.6) !important;
+        box-shadow:
+            0 0 50px 8px rgba(59, 130, 246, 0.5),
+            0 18px 52px rgba(0, 0, 0, 0.8),
+            0 0 0 1px rgba(255, 255, 255, 0.15) inset !important;
+        transform: translateY(-3px) scale(1.005) !important;
+    }}
+
+    /* Suppress all Streamlit default UI chrome, headers, toolbars, and loading ghosts */
+    #MainMenu, footer, header, [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], .stDeployButton, [data-testid="stStatusWidget"] {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }}
 </style>
 """
@@ -279,11 +389,18 @@ with st.sidebar:
         st.rerun()
 
     if st.button("🔄 Re-index Knowledge", use_container_width=True):
-        with st.spinner("Updating index..."):
-            documents = load_documents(DOCS_DIR)
-            index = build_index(documents)
-            st.cache_resource.clear()
-            st.rerun()
+        with st.spinner("Embedding documents with Gemini AI..."):
+            try:
+                documents = load_documents(DOCS_DIR)
+                index = build_index(documents)
+                st.cache_resource.clear()
+                st.toast("✅ Knowledge base re-indexed successfully!", icon="✦")
+                st.rerun()
+            except Exception as re_err:
+                if "ResourceExhausted" in str(re_err) or "429" in str(re_err) or "Quota" in str(re_err):
+                    st.error("⏳ **Gemini Rate Limit (429)**: The API quota was temporarily reached. Please wait ~30s before re-indexing, or continue chatting using your existing cached index.")
+                else:
+                    st.error(f"Re-indexing error: {re_err}")
 
 # ---------------------------------------------------------
 # 6. Hero View (Empty Chat State)
