@@ -1,6 +1,21 @@
-# hyyzo_docs_ai - Requirements
+# hyyzo_docs_ai - Python Dependencies
+
+# Core Web & API Frameworks
+streamlit>=1.30.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
+pydantic>=2.0.0
 pillow>=10.4.0
-   
-streamlit
-fastapi
-uvicorn
+
+# LLM & RAG Engine (LlamaIndex + Google Gemini)
+llama-index-core>=0.11.0
+llama-index-llms-gemini>=0.3.0
+llama-index-embeddings-gemini>=0.2.0
+
+# Environment & Utilities
+python-dotenv>=1.0.0
+
+# Testing & Quality Assurance
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+

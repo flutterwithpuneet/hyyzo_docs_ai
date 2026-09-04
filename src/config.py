@@ -12,8 +12,14 @@ load_dotenv()
 # Project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Gemini API
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+# Gemini API - support GOOGLE_API_KEY, GEMINI_API_KEY, and streamlit secrets
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+if not GOOGLE_API_KEY:
+    try:
+        import streamlit as _st
+        GOOGLE_API_KEY = _st.secrets.get("GOOGLE_API_KEY", "") or _st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        pass
 
 # Model names
 LLM_MODEL = os.getenv("LLM_MODEL", "models/gemini-2.0-flash")
