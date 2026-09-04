@@ -19,6 +19,7 @@ Welcome to **Hyyzo Docs AI**! This complete step-by-step guide is written for ne
 12. [Troubleshooting](#12-troubleshooting)
 13. [Useful Commands](#13-useful-commands)
 14. [Project Summary & 5-Minute Quick Start](#14-project-summary--5-minute-quick-start)
+15. [CI/CD & Automated Testing](#15-cicd--automated-testing)
 
 ---
 
@@ -328,4 +329,32 @@ copy .env.example .env
 # 5. Run the Streamlit Web Application!
 py -m streamlit run app.py
 ```
+
+---
+
+## 15. CI/CD & Automated Testing
+
+This repository includes a production-grade Continuous Integration & Continuous Deployment (CI/CD) setup powered by **GitHub Actions** and **Dependabot**.
+
+### Workflows Included
+1. **CI Pipeline (`.github/workflows/ci.yml`)**:
+   - **Python CI**: Matrix testing across Python 3.11 and 3.12 with pip caching, AST/syntax checks, and automated `pytest` suite.
+   - **Frontend CI**: Matrix testing across Node.js 20 and 22 with npm caching, `npm run lint`, and `npm run build`.
+   - **Docs Validation**: Ensures all documentation files in `docs/` are structured and accessible.
+2. **Release Readiness (`.github/workflows/deploy.yml`)**:
+   - Runs full production verification on tagged releases and main branch merges.
+3. **Automated Dependency Updates (`.github/dependabot.yml`)**:
+   - Automatically opens pull requests weekly for Python `pip` dependencies, Next.js `npm` dependencies, and GitHub Actions versions.
+
+### Running Tests Locally
+```bash
+# Run Python unit and smoke tests
+pytest tests/ -v
+
+# Run Next.js build and linting
+cd frontend
+npm run lint
+npm run build
+```
+
 
