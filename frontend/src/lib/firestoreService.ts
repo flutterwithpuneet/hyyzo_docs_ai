@@ -12,6 +12,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  increment,
   writeBatch
 } from "firebase/firestore";
 
@@ -297,23 +298,50 @@ export const SESSION_DURATION_MS = 60 * 60 * 1000; // 1 Hour in milliseconds
 const SESSION_START_KEY = "hyyzo_session_start_time";
 const SESSION_LAST_ACTIVE_KEY = "hyyzo_session_last_active";
 
-export function initializeSession(uid: string): void {
+export function initializeSession(
+  uid: string,
+  details?: {
+    phoneNumber?: string | null;
+    email?: string | null;
+    displayName?: string | null;
+  }
+): void {
   if (typeof window === "undefined") return;
   const now = Date.now();
   localStorage.setItem(SESSION_START_KEY, now.toString());
   localStorage.setItem(SESSION_LAST_ACTIVE_KEY, now.toString());
 
-  // Record login event in user profile in Firestore
+  // Record login event and increment login count in Firestore
   if (isRealFirebaseConfigured && db) {
     const userDocRef = doc(db, "users", uid);
     setDoc(
       userDocRef,
       {
+        uid: uid,
         lastLoginAt: serverTimestamp(),
-        lastSessionStarted: now
+        lastSessionStarted: now,
+        loginCount: increment(1),
+        ...(details?.email ? { email: details.email } : {}),
+        ...(details?.phoneNumber ? { phoneNumber: details.phoneNumber } : {}),
+        ...(details?.displayName ? { displayName: details.displayName } : {})
       },
       { merge: true }
-    ).catch(() => {});
+    ).catch((err) => console.warn("Could not update user login in Firestore:", err));
+
+    // If phone number is available, also update registered_users collection
+    if (details?.phoneNumber) {
+      const cleanPhone = cleanPhoneNumber(details.phoneNumber);
+      const regDocRef = doc(db, "registered_users", cleanPhone);
+      setDoc(
+        regDocRef,
+        {
+          lastLoginAt: serverTimestamp(),
+          loginCount: increment(1),
+          lastUid: uid
+        },
+        { merge: true }
+      ).catch(() => {});
+    }
   }
 }
 
@@ -418,4 +446,267 @@ export function computeAnalytics(chats: ChatSession[]): SystemAnalyticsSummary {
     topSources,
     sessionMinutesRemaining: getRemainingSessionTimeMinutes()
   };
+}
+
+// -------------------------------------------------------------
+// 6. PHONE NUMBER AUTHORIZATION & 24-HOUR OTP RATE LIMITING
+// -------------------------------------------------------------
+
+export interface OtpVerificationCheck {
+  allowed: boolean;
+  errorType?: "NOT_REGISTERED" | "RATE_LIMIT_EXCEEDED" | "FIRESTORE_ERROR";
+  message?: string;
+  attemptsCount?: number;
+  attemptsRemaining?: number;
+  userData?: {
+    name?: string;
+    role?: string;
+    phoneNumber?: string;
+    status?: string;
+  };
+}
+
+/**
+ * Standardize phone number format for consistent Firestore lookups
+ */
+export function cleanPhoneNumber(rawPhone: string): string {
+  let cleaned = rawPhone.replace(/[^\d+]/g, "").trim();
+  if (!cleaned.startsWith("+")) {
+    if (cleaned.length === 10) {
+      cleaned = "+91" + cleaned;
+    } else {
+      cleaned = "+" + cleaned;
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Check if the mobile number is pre-registered by admin in Firestore
+ * and enforce a strict 2-OTP max limit per 24 hours.
+ */
+export async function verifyMobileRegistrationAndRateLimit(
+  rawPhone: string
+): Promise<OtpVerificationCheck> {
+  const fullPhone = cleanPhoneNumber(rawPhone);
+  const tenDigitPhone = fullPhone.replace(/^\+91/, "");
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+  if (!isRealFirebaseConfigured || !db) {
+    // Demo mode: allow testing with a default rate limit in localStorage
+    const demoKey = `hyyzo_demo_otp_${fullPhone}`;
+    const rawAttempts = localStorage.getItem(demoKey);
+    let attempts: number[] = rawAttempts ? JSON.parse(rawAttempts) : [];
+    attempts = attempts.filter((t) => now - t < TWENTY_FOUR_HOURS_MS);
+
+    if (attempts.length >= 2) {
+      const waitMs = attempts[0] + TWENTY_FOUR_HOURS_MS - now;
+      const hours = Math.floor(waitMs / (3600 * 1000));
+      const mins = Math.ceil((waitMs % (3600 * 1000)) / (60 * 1000));
+      return {
+        allowed: false,
+        errorType: "RATE_LIMIT_EXCEEDED",
+        message: `OTP limit reached (maximum 2 OTPs allowed per 24 hours). Please try again after ${hours}h ${mins}m.`,
+        attemptsCount: attempts.length,
+        attemptsRemaining: 0
+      };
+    }
+
+    return {
+      allowed: true,
+      attemptsCount: attempts.length,
+      attemptsRemaining: 2 - attempts.length,
+      userData: { name: "Demo User", role: "member", phoneNumber: fullPhone, status: "active" }
+    };
+  }
+
+  try {
+    // 1. Check if phone is registered in 'registered_users' collection (try both +91... and 10-digit doc IDs)
+    let userDocRef = doc(db, "registered_users", fullPhone);
+    let userSnapshot = await getDoc(userDocRef);
+
+    if (!userSnapshot.exists()) {
+      // Also try 10 digit document ID format if admin entered without country code
+      userDocRef = doc(db, "registered_users", tenDigitPhone);
+      userSnapshot = await getDoc(userDocRef);
+    }
+
+    // If still not found in registered_users, check 'authorized_phones'
+    if (!userSnapshot.exists()) {
+      const altDocRef = doc(db, "authorized_phones", fullPhone);
+      const altSnapshot = await getDoc(altDocRef);
+      if (altSnapshot.exists()) {
+        userSnapshot = altSnapshot;
+      }
+    }
+
+    // If the mobile number does not exist or is inactive, BLOCK OTP
+    if (!userSnapshot.exists()) {
+      return {
+        allowed: false,
+        errorType: "NOT_REGISTERED",
+        message: "Mobile number is not registered. First need to register via admin to get access."
+      };
+    }
+
+    const userData = userSnapshot.data();
+    if (userData?.status && userData.status === "inactive") {
+      return {
+        allowed: false,
+        errorType: "NOT_REGISTERED",
+        message: "Your account is marked inactive. Please contact the administrator for access."
+      };
+    }
+
+    // 2. Check 24-Hour OTP Rate Limit
+    // Fetch attempts from 'otp_attempts' collection
+    const attemptsDocRef = doc(db, "otp_attempts", fullPhone);
+    const attemptsSnapshot = await getDoc(attemptsDocRef);
+    let attemptsHistory: number[] = [];
+
+    if (attemptsSnapshot.exists()) {
+      const data = attemptsSnapshot.data();
+      if (Array.isArray(data.attempts)) {
+        attemptsHistory = data.attempts;
+      }
+    } else if (Array.isArray(userData?.otpAttempts)) {
+      attemptsHistory = userData.otpAttempts;
+    }
+
+    // Filter to only retain attempts within the last 24 hours
+    const recentAttempts = attemptsHistory.filter((timestamp) => now - timestamp < TWENTY_FOUR_HOURS_MS);
+
+    if (recentAttempts.length >= 2) {
+      const oldestAttempt = recentAttempts[0];
+      const waitMs = oldestAttempt + TWENTY_FOUR_HOURS_MS - now;
+      const hours = Math.floor(waitMs / (3600 * 1000));
+      const mins = Math.ceil((waitMs % (3600 * 1000)) / (60 * 1000));
+
+      return {
+        allowed: false,
+        errorType: "RATE_LIMIT_EXCEEDED",
+        message: `OTP limit reached (maximum 2 OTPs allowed per 24 hours). Please try again after ${hours > 0 ? `${hours}h ` : ""}${mins}m.`,
+        attemptsCount: recentAttempts.length,
+        attemptsRemaining: 0,
+        userData: {
+          name: userData?.name || "Hyyzo User",
+          role: userData?.role || "member",
+          phoneNumber: fullPhone,
+          status: userData?.status || "active"
+        }
+      };
+    }
+
+    return {
+      allowed: true,
+      attemptsCount: recentAttempts.length,
+      attemptsRemaining: 2 - recentAttempts.length,
+      userData: {
+        name: userData?.name || "Hyyzo User",
+        role: userData?.role || "member",
+        phoneNumber: fullPhone,
+        status: userData?.status || "active"
+      }
+    };
+  } catch (error: any) {
+    console.error("Firestore verification error:", error);
+    return {
+      allowed: false,
+      errorType: "FIRESTORE_ERROR",
+      message: error.message || "Failed to verify mobile registration with Firestore."
+    };
+  }
+}
+
+/**
+ * Record an OTP send attempt in Firestore (both in registered_users and otp_attempts collections)
+ */
+export async function recordOtpAttemptToFirestore(rawPhone: string): Promise<void> {
+  const fullPhone = cleanPhoneNumber(rawPhone);
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+  if (!isRealFirebaseConfigured || !db) {
+    const demoKey = `hyyzo_demo_otp_${fullPhone}`;
+    const rawAttempts = localStorage.getItem(demoKey);
+    let attempts: number[] = rawAttempts ? JSON.parse(rawAttempts) : [];
+    attempts = attempts.filter((t) => now - t < TWENTY_FOUR_HOURS_MS);
+    attempts.push(now);
+    localStorage.setItem(demoKey, JSON.stringify(attempts));
+    return;
+  }
+
+  try {
+    // 1. Update otp_attempts collection
+    const attemptsDocRef = doc(db, "otp_attempts", fullPhone);
+    const snap = await getDoc(attemptsDocRef);
+    let existingAttempts: number[] = [];
+
+    if (snap.exists() && Array.isArray(snap.data()?.attempts)) {
+      existingAttempts = snap.data().attempts.filter((t: number) => now - t < TWENTY_FOUR_HOURS_MS);
+    }
+    existingAttempts.push(now);
+
+    await setDoc(
+      attemptsDocRef,
+      {
+        phoneNumber: fullPhone,
+        attempts: existingAttempts,
+        lastAttemptAt: serverTimestamp(),
+        count24h: existingAttempts.length,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+
+    // 2. Also update registered_users document
+    const userDocRef = doc(db, "registered_users", fullPhone);
+    await setDoc(
+      userDocRef,
+      {
+        lastOtpSentAt: serverTimestamp(),
+        otpAttempts: existingAttempts
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("Could not record OTP attempt to Firestore:", err);
+  }
+}
+
+/**
+ * Helper to register or seed an authorized user into Firestore
+ */
+export async function registerAuthorizedUserInFirestore(
+  rawPhone: string,
+  name: string = "Admin / Team Member",
+  role: "admin" | "member" = "member"
+): Promise<{ success: boolean; message: string }> {
+  const fullPhone = cleanPhoneNumber(rawPhone);
+
+  if (!isRealFirebaseConfigured || !db) {
+    return { success: true, message: `(Demo Mode) User registered for ${fullPhone}` };
+  }
+
+  try {
+    const userDocRef = doc(db, "registered_users", fullPhone);
+    await setDoc(
+      userDocRef,
+      {
+        phoneNumber: fullPhone,
+        name: name,
+        role: role,
+        status: "active",
+        createdAt: serverTimestamp(),
+        otpAttempts: [],
+        registeredBy: "admin"
+      },
+      { merge: true }
+    );
+    return { success: true, message: `Successfully registered ${fullPhone} in Firestore!` };
+  } catch (err: any) {
+    console.error("Error registering user in Firestore:", err);
+    return { success: false, message: err.message || "Failed to register user in Firestore." };
+  }
 }

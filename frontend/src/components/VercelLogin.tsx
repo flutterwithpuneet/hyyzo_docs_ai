@@ -10,14 +10,23 @@ import {
   ConfirmationResult,
   isRealFirebaseConfigured
 } from "@/lib/firebase";
-import { initializeSession } from "@/lib/firestoreService";
+import {
+  initializeSession,
+  verifyMobileRegistrationAndRateLimit,
+  recordOtpAttemptToFirestore,
+  registerAuthorizedUserInFirestore,
+  cleanPhoneNumber
+} from "@/lib/firestoreService";
 import {
   ShieldCheck,
   AlertCircle,
   CheckCircle2,
   ArrowRight,
   RotateCcw,
-  Smartphone
+  Smartphone,
+  UserPlus,
+  X,
+  Lock
 } from "lucide-react";
 
 export interface AuthUser {
@@ -53,6 +62,14 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
+
+  // Admin Quick Authorize / Register Modal
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPhoneInput, setAdminPhoneInput] = useState("");
+  const [adminNameInput, setAdminNameInput] = useState("");
+  const [adminPasskey, setAdminPasskey] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminFeedback, setAdminFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
@@ -108,8 +125,8 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     setSuccessMsg(null);
 
     const cleanNumber = phoneNumber.trim().replace(/[\s-]/g, "");
-    if (!cleanNumber || cleanNumber.length < 7) {
-      setErrorMsg("Please enter a valid mobile number.");
+    if (!cleanNumber || cleanNumber.length !== 10) {
+      setErrorMsg("Please enter a valid 10-digit Indian mobile number.");
       return;
     }
 
@@ -117,6 +134,20 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     setLoading(true);
 
     try {
+      // -------------------------------------------------------------
+      // 1. Check Registration & 24h Rate Limit in Firestore
+      // -------------------------------------------------------------
+      const check = await verifyMobileRegistrationAndRateLimit(fullPhoneNumber);
+      
+      if (!check.allowed) {
+        setErrorMsg(check.message || "First need to register via admin to get access.");
+        setLoading(false);
+        return;
+      }
+
+      // -------------------------------------------------------------
+      // 2. Proceed to send SMS OTP via Firebase Phone Auth
+      // -------------------------------------------------------------
       if (isRealFirebaseConfigured && auth) {
         const appVerifier = setupRecaptcha();
         if (!appVerifier) {
@@ -126,11 +157,19 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         const confirmation = await signInWithPhoneNumber(auth, fullPhoneNumber, appVerifier);
         window.confirmationResult = confirmation;
         setConfirmationResult(confirmation);
+        
+        // Record attempt in Firestore audit logs
+        await recordOtpAttemptToFirestore(fullPhoneNumber);
+
         setOtpStep("otp");
         setResendTimer(45);
-        setSuccessMsg(`OTP sent successfully to ${fullPhoneNumber}`);
+        const remainingText = check.attemptsRemaining !== undefined
+          ? ` (${check.attemptsRemaining} OTP request${check.attemptsRemaining === 1 ? "" : "s"} remaining today)`
+          : "";
+        setSuccessMsg(`OTP sent successfully to ${fullPhoneNumber}${remainingText}`);
       } else {
         // Instant Demo Mode fallback for local testing
+        await recordOtpAttemptToFirestore(fullPhoneNumber);
         await new Promise((resolve) => setTimeout(resolve, 800));
         setOtpStep("otp");
         setResendTimer(30);
@@ -140,7 +179,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       console.error("Phone Auth error:", err);
       let msg = err.message || "Failed to send OTP.";
       if (err.code === "auth/invalid-phone-number") {
-        msg = "The phone number format is invalid. Please include valid country code & digits.";
+        msg = "The phone number format is invalid. Please enter 10 digits.";
       } else if (err.code === "auth/too-many-requests") {
         msg = "Too many requests. Please wait a few minutes before requesting another OTP.";
       } else if (err.code === "auth/quota-exceeded") {
@@ -185,7 +224,11 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           displayName: u.displayName || u.phoneNumber || "Hyyzo User",
           photoURL: u.photoURL
         };
-        initializeSession(authUser.uid);
+        initializeSession(authUser.uid, {
+          phoneNumber: authUser.phoneNumber,
+          email: authUser.email,
+          displayName: authUser.displayName
+        });
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
         setSuccessMsg("Mobile verified successfully! Logging you in...");
         setTimeout(() => onLoginSuccess(authUser), 600);
@@ -200,7 +243,11 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           displayName: `User (${fullPhoneNumber})`,
           photoURL: null
         };
-        initializeSession(demoUser.uid);
+        initializeSession(demoUser.uid, {
+          phoneNumber: demoUser.phoneNumber,
+          email: demoUser.email,
+          displayName: demoUser.displayName
+        });
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(demoUser));
         setSuccessMsg("Mobile verified successfully! Logging in...");
         setTimeout(() => onLoginSuccess(demoUser), 600);
@@ -238,7 +285,11 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           displayName: u.displayName || u.email?.split("@")[0] || "Google User",
           photoURL: u.photoURL
         };
-        initializeSession(authUser.uid);
+        initializeSession(authUser.uid, {
+          phoneNumber: authUser.phoneNumber,
+          email: authUser.email,
+          displayName: authUser.displayName
+        });
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
         setSuccessMsg("Signed in with Google!");
         setTimeout(() => onLoginSuccess(authUser), 600);
@@ -252,8 +303,12 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           displayName: "Alex Developer",
           photoURL: null
         };
+        initializeSession(demoGoogleUser.uid, {
+          phoneNumber: demoGoogleUser.phoneNumber,
+          email: demoGoogleUser.email,
+          displayName: demoGoogleUser.displayName
+        });
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(demoGoogleUser));
-        initializeSession(demoGoogleUser.uid);
         setSuccessMsg("Signed in with Google!");
         setTimeout(() => onLoginSuccess(demoGoogleUser), 600);
       }
@@ -272,6 +327,40 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdminRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminFeedback(null);
+
+    const clean = adminPhoneInput.trim().replace(/[\s-]/g, "");
+    if (!clean || clean.length < 10) {
+      setAdminFeedback({ type: "error", text: "Please enter a valid 10-digit mobile number." });
+      return;
+    }
+
+    setAdminLoading(true);
+    try {
+      const res = await registerAuthorizedUserInFirestore(
+        clean,
+        adminNameInput || "Team Member",
+        "member"
+      );
+      if (res.success) {
+        setAdminFeedback({ type: "success", text: `Registered ${cleanPhoneNumber(clean)} successfully in Firestore!` });
+        setPhoneNumber(clean.replace(/^\+91/, ""));
+        setTimeout(() => {
+          setShowAdminModal(false);
+          setAdminFeedback(null);
+        }, 1200);
+      } else {
+        setAdminFeedback({ type: "error", text: res.message });
+      }
+    } catch (e: any) {
+      setAdminFeedback({ type: "error", text: e.message || "Failed to register number." });
+    } finally {
+      setAdminLoading(false);
     }
   };
 
@@ -521,7 +610,118 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
 
         </div>
 
+        {/* Admin Quick Action Link */}
+        <div className="text-center mt-4">
+          <button
+            type="button"
+            onClick={() => {
+              setAdminPhoneInput(phoneNumber);
+              setAdminFeedback(null);
+              setShowAdminModal(true);
+            }}
+            className="text-[11px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Lock className="w-3 h-3 text-slate-500" />
+            <span>Admin: Register new mobile number</span>
+          </button>
+        </div>
+
       </div>
+
+      {/* Admin Authorization / Quick Registration Modal */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md p-6 rounded-2xl bg-[#0c1222] border border-[#23314e] shadow-2xl relative">
+            <button
+              onClick={() => setShowAdminModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Register Mobile in Firestore</h3>
+                <p className="text-xs text-slate-400">Authorizes user in <code className="font-mono text-sky-300">registered_users</code> collection.</p>
+              </div>
+            </div>
+
+            {adminFeedback && (
+              <div className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
+                adminFeedback.type === "success"
+                  ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+                  : "bg-rose-500/10 border border-rose-500/30 text-rose-300"
+              }`}>
+                {adminFeedback.type === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                )}
+                <span>{adminFeedback.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminRegister} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Mobile Number</label>
+                <div className="flex gap-2">
+                  <div className="bg-[#070b15] border border-[#1e40af] rounded-xl px-3 py-2 text-xs text-white font-mono flex items-center">
+                    🇮🇳 +91
+                  </div>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="98765 43210"
+                    value={adminPhoneInput}
+                    onChange={(e) => setAdminPhoneInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                    className="flex-1 bg-[#070b15] border border-[#1e40af] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 outline-none font-mono"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Full Name / Member Name</label>
+                <input
+                  type="text"
+                  placeholder="Puneet Sharma"
+                  value={adminNameInput}
+                  onChange={(e) => setAdminNameInput(e.target.value)}
+                  className="w-full bg-[#070b15] border border-[#1e40af] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminLoading || adminPhoneInput.length < 10}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
+                >
+                  {adminLoading ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Register in Firestore</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
