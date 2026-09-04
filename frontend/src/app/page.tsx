@@ -460,19 +460,16 @@ export default function WorldClassAIAssistant() {
       >
         {/* Brand Header */}
         <div className="p-4 pb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <img
-              src="/hyyzo-wordmark.png"
-              alt="HYYZO Logo"
-              className="h-6 w-auto object-contain"
+              src="/icon.png"
+              alt="Hyyzo Logo"
+              className="w-7 h-7 rounded-full object-contain shadow-sm shrink-0"
             />
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-              theme === 'dark'
-                ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
-                : 'bg-orange-50 text-orange-600 border border-orange-200'
-            }`}>
-              Docs AI
-            </span>
+            <div>
+              <span className="font-bold text-sm tracking-tight block">Hyyzo AI</span>
+              <span className={`text-[10px] block font-mono ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>Docs Assistant</span>
+            </div>
           </div>
 
           <button
@@ -752,17 +749,6 @@ export default function WorldClassAIAssistant() {
           {/* Empty State Welcome Layout */}
           {(!currentChat || currentChat.messages.length === 0) && (
             <div className="py-12 flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in duration-300">
-              <div className="flex flex-col items-center justify-center">
-                <div className="relative group">
-                  <div className="absolute -inset-2 rounded-full bg-gradient-to-b from-orange-400/20 to-orange-600/35 blur-xl pointer-events-none" />
-                  <img
-                    src="/logo.png"
-                    alt="Hyyzo Emblem"
-                    className="w-14 h-14 rounded-full relative z-10 shadow-[0_10px_22px_-2px_rgba(249,115,22,0.45)] object-contain select-none"
-                  />
-                </div>
-              </div>
-
               <div className="space-y-2 max-w-md">
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                   What can I help you explore?

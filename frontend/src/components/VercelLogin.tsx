@@ -118,12 +118,13 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     try {
       if (isRealFirebaseConfigured && auth) {
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
         const res = await signInWithPopup(auth, provider);
         const u = res.user;
         const authUser: AuthUser = {
           uid: u.uid,
           email: u.email,
-          displayName: u.displayName || "Google User",
+          displayName: u.displayName || u.email?.split("@")[0] || "Google User",
           photoURL: u.photoURL
         };
         setSuccessMsg("Signed in with Google!");
@@ -142,8 +143,19 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         setTimeout(() => onLoginSuccess(demoGoogleUser), 600);
       }
     } catch (err: any) {
-      console.error("Google Auth error:", err);
-      setErrorMsg(err.message || "Google sign-in was cancelled or failed.");
+      if (err.code === "auth/popup-closed-by-user") {
+        // User voluntarily closed the Google popup; do not treat as a hard failure
+        console.info("Google sign-in popup was closed before completion.");
+      } else if (err.code === "auth/popup-blocked") {
+        setErrorMsg("Sign-in popup was blocked by your browser. Please allow popups for localhost.");
+      } else if (err.code === "auth/cancelled-popup-request") {
+        // Another popup request was opened
+      } else if (err.code === "auth/unauthorized-domain") {
+        setErrorMsg("This domain is not authorized in Firebase Console > Authentication > Settings > Authorized domains.");
+      } else {
+        console.error("Google Auth error:", err);
+        setErrorMsg(err.message || "Google sign-in could not be completed.");
+      }
     } finally {
       setLoading(false);
     }
