@@ -10,6 +10,7 @@ import {
   getDocs,
   deleteDoc,
   query,
+  where,
   orderBy,
   serverTimestamp,
   increment,
@@ -156,15 +157,16 @@ export async function syncConversationToFirestore(uid: string, chat: ChatSession
 
   try {
     const convDocRef = doc(db, "users", uid, "conversations", chat.id);
+    const nowIso = new Date().toISOString();
     await setDoc(
       convDocRef,
       {
         id: chat.id,
-        title: chat.title,
-        createdAtText: chat.createdAt,
-        updatedAt: serverTimestamp(),
+        title: chat.title || "(not define)",
+        createdAtText: chat.createdAt || "(not define)",
+        updatedAt: nowIso,
         updatedAtText: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        model: chat.model || "gemini-2.0-flash"
+        model: chat.model || "gemini-flash-latest"
       },
       { merge: true }
     );
@@ -177,12 +179,12 @@ export async function syncConversationToFirestore(uid: string, chat: ChatSession
         msgRef,
         {
           id: msg.id,
-          role: msg.role,
-          content: msg.content,
+          role: msg.role || "(not define)",
+          content: msg.content || "(not define)",
           sources: msg.sources || [],
-          timestamp: msg.timestamp,
-          rating: msg.rating || null,
-          createdAt: serverTimestamp()
+          timestamp: msg.timestamp || "(not define)",
+          rating: msg.rating || "(not define)",
+          createdAt: nowIso
         },
         { merge: true }
       );
@@ -261,27 +263,29 @@ export async function recordGlobalFeedback(payload: FeedbackPayload): Promise<vo
   }
 
   try {
+    const nowIso = new Date().toISOString();
+
     // 1. Update rating on the user's specific message doc
     const msgDocRef = doc(db, "users", userId, "conversations", conversationId, "messages", messageId);
-    await setDoc(msgDocRef, { rating: rating }, { merge: true });
+    await setDoc(msgDocRef, { rating: rating || "(not define)", updatedAt: nowIso }, { merge: true });
 
     // 2. Write to the global_feedback collection for team analytics & monitoring
     const globalFeedbackDocRef = doc(db, "global_feedback", `${conversationId}_${messageId}`);
     await setDoc(
       globalFeedbackDocRef,
       {
-        userId: userId,
-        userEmail: userEmail || "anonymous",
-        conversationId: conversationId,
-        messageId: messageId,
-        question: question || "",
-        responseSnippet: response.substring(0, 500),
-        rating: rating,
+        userId: userId || "(not define)",
+        userEmail: userEmail || "(not define)",
+        conversationId: conversationId || "(not define)",
+        messageId: messageId || "(not define)",
+        question: question || "(not define)",
+        responseSnippet: response ? response.substring(0, 500) : "(not define)",
+        rating: rating || "(not define)",
         sourcesCount: sources ? sources.length : 0,
         sources: sources ? sources.map((s) => s.file) : [],
-        model: model || "gemini-2.0-flash",
-        updatedAt: serverTimestamp(),
-        timestamp: new Date().toISOString()
+        model: model || "gemini-flash-latest",
+        updatedAt: nowIso,
+        timestamp: nowIso
       },
       { merge: true }
     );
@@ -304,40 +308,74 @@ export function initializeSession(
     phoneNumber?: string | null;
     email?: string | null;
     displayName?: string | null;
+    role?: string | null;
   }
 ): void {
   if (typeof window === "undefined") return;
   const now = Date.now();
+  const nowIso = new Date().toISOString();
   localStorage.setItem(SESSION_START_KEY, now.toString());
   localStorage.setItem(SESSION_LAST_ACTIVE_KEY, now.toString());
 
   // Record login event and increment login count in Firestore
   if (isRealFirebaseConfigured && db) {
     const userDocRef = doc(db, "users", uid);
+    const safeDisplayName = details?.displayName && details.displayName.trim() ? details.displayName.trim() : "User";
+    const safeEmail = details?.email && details.email.trim() ? details.email.trim() : "(not define)";
+    const safePhoneNumber = details?.phoneNumber && details.phoneNumber.trim() ? details.phoneNumber.trim() : "(not define)";
+    const safeRole = details?.role && details.role.trim() ? details.role.trim() : "member";
+
     setDoc(
       userDocRef,
       {
         uid: uid,
-        lastLoginAt: serverTimestamp(),
+        displayName: safeDisplayName,
+        email: safeEmail,
+        phoneNumber: safePhoneNumber,
+        role: safeRole,
+        status: "active",
+        lastLoginAt: nowIso,
         lastSessionStarted: now,
-        loginCount: increment(1),
-        ...(details?.email ? { email: details.email } : {}),
-        ...(details?.phoneNumber ? { phoneNumber: details.phoneNumber } : {}),
-        ...(details?.displayName ? { displayName: details.displayName } : {})
+        loginCount: increment(1)
       },
       { merge: true }
     ).catch((err) => console.warn("Could not update user login in Firestore:", err));
 
     // If phone number is available, also update registered_users collection
-    if (details?.phoneNumber) {
+    if (details?.phoneNumber && details.phoneNumber !== "(not define)") {
       const cleanPhone = cleanPhoneNumber(details.phoneNumber);
       const regDocRef = doc(db, "registered_users", cleanPhone);
       setDoc(
         regDocRef,
         {
-          lastLoginAt: serverTimestamp(),
+          phoneNumber: cleanPhone,
+          displayName: safeDisplayName,
+          name: safeDisplayName,
+          lastLoginAt: nowIso,
+          lastSessionStarted: now,
           loginCount: increment(1),
-          lastUid: uid
+          lastUid: uid,
+          status: "active"
+        },
+        { merge: true }
+      ).catch(() => {});
+    }
+
+    // If email is available, also update registered_users collection
+    if (details?.email && details.email !== "(not define)") {
+      const cleanEmail = details.email.trim().toLowerCase();
+      const regDocRef = doc(db, "registered_users", cleanEmail);
+      setDoc(
+        regDocRef,
+        {
+          email: cleanEmail,
+          displayName: safeDisplayName,
+          name: safeDisplayName,
+          lastLoginAt: nowIso,
+          lastSessionStarted: now,
+          loginCount: increment(1),
+          lastUid: uid,
+          status: "active"
         },
         { merge: true }
       ).catch(() => {});
@@ -642,6 +680,7 @@ export async function recordOtpAttemptToFirestore(rawPhone: string): Promise<voi
     const attemptsDocRef = doc(db, "otp_attempts", fullPhone);
     const snap = await getDoc(attemptsDocRef);
     let existingAttempts: number[] = [];
+    const nowIso = new Date().toISOString();
 
     if (snap.exists() && Array.isArray(snap.data()?.attempts)) {
       existingAttempts = snap.data().attempts.filter((t: number) => now - t < TWENTY_FOUR_HOURS_MS);
@@ -651,11 +690,11 @@ export async function recordOtpAttemptToFirestore(rawPhone: string): Promise<voi
     await setDoc(
       attemptsDocRef,
       {
-        phoneNumber: fullPhone,
+        phoneNumber: fullPhone || "(not define)",
         attempts: existingAttempts,
-        lastAttemptAt: serverTimestamp(),
+        lastAttemptAt: nowIso,
         count24h: existingAttempts.length,
-        updatedAt: new Date().toISOString()
+        updatedAt: nowIso
       },
       { merge: true }
     );
@@ -665,8 +704,10 @@ export async function recordOtpAttemptToFirestore(rawPhone: string): Promise<voi
     await setDoc(
       userDocRef,
       {
-        lastOtpSentAt: serverTimestamp(),
-        otpAttempts: existingAttempts
+        phoneNumber: fullPhone || "(not define)",
+        lastOtpSentAt: nowIso,
+        otpAttempts: existingAttempts,
+        updatedAt: nowIso
       },
       { merge: true }
     );
@@ -676,37 +717,147 @@ export async function recordOtpAttemptToFirestore(rawPhone: string): Promise<voi
 }
 
 /**
- * Helper to register or seed an authorized user into Firestore
+ * Helper to register or seed an authorized user into Firestore (Phone or Email)
  */
 export async function registerAuthorizedUserInFirestore(
-  rawPhone: string,
-  name: string = "Admin / Team Member",
+  identifier: string,
+  name: string = "User",
   role: "admin" | "member" = "member"
 ): Promise<{ success: boolean; message: string }> {
-  const fullPhone = cleanPhoneNumber(rawPhone);
+  const isEmail = identifier.includes("@");
+  const cleanId = isEmail ? identifier.trim().toLowerCase() : cleanPhoneNumber(identifier);
+  const now = Date.now();
+  const nowIso = new Date().toISOString();
+  const safeName = name && name.trim() ? name.trim() : "User";
 
   if (!isRealFirebaseConfigured || !db) {
-    return { success: true, message: `(Demo Mode) User registered for ${fullPhone}` };
+    return { success: true, message: `(Demo Mode) User registered for ${cleanId}` };
   }
 
   try {
-    const userDocRef = doc(db, "registered_users", fullPhone);
+    const userDocRef = doc(db, "registered_users", cleanId);
     await setDoc(
       userDocRef,
       {
-        phoneNumber: fullPhone,
-        name: name,
-        role: role,
+        displayName: safeName,
+        name: safeName,
+        email: isEmail ? cleanId : "(not define)",
+        phoneNumber: isEmail ? "(not define)" : cleanId,
+        role: role || "member",
         status: "active",
-        createdAt: serverTimestamp(),
+        isApproved: true,
+        loginCount: 0,
+        lastLoginAt: nowIso,
+        lastSessionStarted: now,
+        lastUid: "(not define)",
+        createdAt: nowIso,
         otpAttempts: [],
         registeredBy: "admin"
       },
       { merge: true }
     );
-    return { success: true, message: `Successfully registered ${fullPhone} in Firestore!` };
+    return { success: true, message: `Successfully registered & approved ${cleanId} in Firestore!` };
   } catch (err: any) {
     console.error("Error registering user in Firestore:", err);
     return { success: false, message: err.message || "Failed to register user in Firestore." };
+  }
+}
+
+// -------------------------------------------------------------
+// 7. GOOGLE / GMAIL LOGIN PRE-APPROVAL & AUTHORIZATION CHECK
+// -------------------------------------------------------------
+
+export interface EmailVerificationCheck {
+  allowed: boolean;
+  errorType?: "NOT_REGISTERED" | "NOT_APPROVED" | "FIRESTORE_ERROR";
+  message?: string;
+  userData?: {
+    name?: string;
+    email?: string;
+    role?: string;
+    status?: string;
+  };
+}
+
+/**
+ * Verify whether a Google/Gmail account is pre-approved / registered by admin in Firestore
+ */
+export async function verifyEmailRegistration(rawEmail: string): Promise<EmailVerificationCheck> {
+  const email = rawEmail.trim().toLowerCase();
+
+  if (!isRealFirebaseConfigured || !db) {
+    // Demo mode: allow testing
+    return {
+      allowed: true,
+      userData: { name: "Alex Developer", email: email, role: "admin", status: "active" }
+    };
+  }
+
+  try {
+    // 1. Check registered_users by document ID (e.g. registered_users/name@company.com)
+    let emailDocRef = doc(db, "registered_users", email);
+    let snapshot = await getDoc(emailDocRef);
+
+    // 2. If not found by doc ID, query registered_users by 'email' field
+    if (!snapshot.exists()) {
+      const q = query(collection(db, "registered_users"), where("email", "==", email));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        snapshot = qSnap.docs[0];
+      }
+    }
+
+    // 3. Check authorized_emails collection
+    if (!snapshot.exists()) {
+      const altDocRef = doc(db, "authorized_emails", email);
+      const altSnap = await getDoc(altDocRef);
+      if (altSnap.exists()) {
+        snapshot = altSnap;
+      }
+    }
+
+    // 4. Check users collection for pre-existing approved records
+    if (!snapshot.exists()) {
+      const qUser = query(collection(db, "users"), where("email", "==", email));
+      const qUserSnap = await getDocs(qUser);
+      if (!qUserSnap.empty) {
+        snapshot = qUserSnap.docs[0];
+      }
+    }
+
+    // If not found anywhere, block access
+    if (!snapshot.exists()) {
+      return {
+        allowed: false,
+        errorType: "NOT_REGISTERED",
+        message: `Access Denied: Google account (${email}) is not registered. First need to be added/approved via admin.`
+      };
+    }
+
+    const data = snapshot.data();
+    if (data?.status === "inactive" || data?.isApproved === false) {
+      return {
+        allowed: false,
+        errorType: "NOT_APPROVED",
+        message: `Access Pending: Google account (${email}) is currently inactive or not approved by admin.`
+      };
+    }
+
+    return {
+      allowed: true,
+      userData: {
+        name: data?.name || data?.displayName || email.split("@")[0],
+        email: email,
+        role: data?.role || "member",
+        status: data?.status || "active"
+      }
+    };
+  } catch (err: any) {
+    console.error("Error verifying email in Firestore:", err);
+    return {
+      allowed: false,
+      errorType: "FIRESTORE_ERROR",
+      message: err.message || "Failed to verify Google account authorization with Firestore."
+    };
   }
 }

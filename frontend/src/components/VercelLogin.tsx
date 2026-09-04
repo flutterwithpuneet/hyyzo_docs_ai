@@ -8,11 +8,13 @@ import {
   signInWithPhoneNumber,
   RecaptchaVerifier,
   ConfirmationResult,
+  fbSignOut,
   isRealFirebaseConfigured
 } from "@/lib/firebase";
 import {
   initializeSession,
   verifyMobileRegistrationAndRateLimit,
+  verifyEmailRegistration,
   recordOtpAttemptToFirestore,
   registerAuthorizedUserInFirestore,
   cleanPhoneNumber
@@ -278,6 +280,23 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         provider.setCustomParameters({ prompt: "select_account" });
         const res = await signInWithPopup(auth, provider);
         const u = res.user;
+
+        // -------------------------------------------------------------
+        // Verify Google / Gmail account pre-approval in Firestore
+        // -------------------------------------------------------------
+        if (u.email) {
+          const emailCheck = await verifyEmailRegistration(u.email);
+          if (!emailCheck.allowed) {
+            await fbSignOut(auth);
+            setErrorMsg(
+              emailCheck.message ||
+              `Access Denied: Google account (${u.email}) is not registered. First need to be added via admin.`
+            );
+            setLoading(false);
+            return;
+          }
+        }
+
         const authUser: AuthUser = {
           uid: u.uid,
           email: u.email,
@@ -291,7 +310,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           displayName: authUser.displayName
         });
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
-        setSuccessMsg("Signed in with Google!");
+        setSuccessMsg(`Signed in with Google! Welcome ${authUser.displayName}`);
         setTimeout(() => onLoginSuccess(authUser), 600);
       } else {
         // Seamless Google Auth Demo
@@ -334,9 +353,9 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     e.preventDefault();
     setAdminFeedback(null);
 
-    const clean = adminPhoneInput.trim().replace(/[\s-]/g, "");
-    if (!clean || clean.length < 10) {
-      setAdminFeedback({ type: "error", text: "Please enter a valid 10-digit mobile number." });
+    const clean = adminPhoneInput.trim();
+    if (!clean) {
+      setAdminFeedback({ type: "error", text: "Please enter a valid mobile number or email." });
       return;
     }
 
@@ -348,17 +367,19 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         "member"
       );
       if (res.success) {
-        setAdminFeedback({ type: "success", text: `Registered ${cleanPhoneNumber(clean)} successfully in Firestore!` });
-        setPhoneNumber(clean.replace(/^\+91/, ""));
+        setAdminFeedback({ type: "success", text: res.message });
+        if (!clean.includes("@")) {
+          setPhoneNumber(clean.replace(/[^\d]/g, "").slice(-10));
+        }
         setTimeout(() => {
           setShowAdminModal(false);
           setAdminFeedback(null);
-        }, 1200);
+        }, 1300);
       } else {
         setAdminFeedback({ type: "error", text: res.message });
       }
     } catch (e: any) {
-      setAdminFeedback({ type: "error", text: e.message || "Failed to register number." });
+      setAdminFeedback({ type: "error", text: e.message || "Failed to register user." });
     } finally {
       setAdminLoading(false);
     }
@@ -644,8 +665,8 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
                 <UserPlus className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-white">Register Mobile in Firestore</h3>
-                <p className="text-xs text-slate-400">Authorizes user in <code className="font-mono text-sky-300">registered_users</code> collection.</p>
+                <h3 className="text-base font-semibold text-white">Authorize User in Firestore</h3>
+                <p className="text-xs text-slate-400">Pre-approves mobile number or Google/Gmail in <code className="font-mono text-sky-300">registered_users</code>.</p>
               </div>
             </div>
 
@@ -666,22 +687,21 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
 
             <form onSubmit={handleAdminRegister} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Mobile Number</label>
-                <div className="flex gap-2">
-                  <div className="bg-[#070b15] border border-[#1e40af] rounded-xl px-3 py-2 text-xs text-white font-mono flex items-center">
-                    🇮🇳 +91
-                  </div>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="98765 43210"
-                    value={adminPhoneInput}
-                    onChange={(e) => setAdminPhoneInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
-                    className="flex-1 bg-[#070b15] border border-[#1e40af] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 outline-none font-mono"
-                    autoFocus
-                  />
-                </div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Mobile Number OR Gmail Address
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 9876543210 or name@gmail.com"
+                  value={adminPhoneInput}
+                  onChange={(e) => setAdminPhoneInput(e.target.value)}
+                  className="w-full bg-[#070b15] border border-[#1e40af] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 outline-none font-mono"
+                  autoFocus
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Enter 10-digit mobile number for OTP login or Gmail address for Google Sign-In.
+                </p>
               </div>
 
               <div>
