@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,7 +12,6 @@ import {
   Copy,
   Check,
   Share2,
-  ExternalLink,
   ChevronRight,
   ChevronDown,
   Clock,
@@ -161,8 +160,25 @@ function MarkdownViewerInner() {
   const fileQuery = searchParams.get("file");
 
   // Authentication State
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("hyyzo_auth_user");
+      if (savedUser) {
+        try {
+          if (!isSessionExpired()) {
+            return JSON.parse(savedUser);
+          } else {
+            clearSession();
+            localStorage.removeItem("hyyzo_auth_user");
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return null;
+  });
+  const [authInitialized, setAuthInitialized] = useState<boolean>(!auth);
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
 
   // Documentation State
@@ -173,7 +189,13 @@ function MarkdownViewerInner() {
   const [docLoading, setDocLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme") as "dark" | "light" | null;
+      return savedTheme || "dark";
+    }
+    return "dark";
+  });
   const [copied, setCopied] = useState<boolean>(false);
   const [shareCopied, setShareCopied] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -187,25 +209,20 @@ function MarkdownViewerInner() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Initialize theme from localStorage or system & update document root class
+  // Sync theme with document root class
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as "dark" | "light" | null;
-    const initialTheme = savedTheme || "dark";
-    setTheme(initialTheme);
     document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(initialTheme);
-  }, []);
+    document.documentElement.classList.add(theme);
+  }, [theme]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     localStorage.setItem("theme", next);
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(next);
   };
 
   // Sign out handler
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     if (auth) {
       try {
         await fbSignOut(auth);
@@ -217,49 +234,32 @@ function MarkdownViewerInner() {
     localStorage.removeItem("hyyzo_auth_user");
     setCurrentUser(null);
     setShowLogoutModal(false);
-  };
+  }, []);
 
   // Check Authentication & Firebase Session
   useEffect(() => {
-    const savedUser = localStorage.getItem("hyyzo_auth_user");
-    if (savedUser) {
-      try {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
         if (isSessionExpired()) {
           handleSignOut();
         } else {
-          setCurrentUser(JSON.parse(savedUser));
+          const authUser: AuthUser = {
+            uid: fbUser.uid,
+            email: fbUser.email,
+            displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
+            photoURL: fbUser.photoURL,
+            phoneNumber: fbUser.phoneNumber || undefined,
+          };
+          setCurrentUser(authUser);
+          localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
         }
-      } catch (e) {
-        console.error("Local auth parsing error:", e);
       }
-    }
-
-    let unsubscribe = () => {};
-    if (auth) {
-      unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-        if (fbUser) {
-          if (isSessionExpired()) {
-            handleSignOut();
-          } else {
-            const authUser: AuthUser = {
-              uid: fbUser.uid,
-              email: fbUser.email,
-              displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
-              photoURL: fbUser.photoURL,
-              phoneNumber: fbUser.phoneNumber || undefined,
-            };
-            setCurrentUser(authUser);
-            localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
-          }
-        }
-        setAuthInitialized(true);
-      });
-    } else {
       setAuthInitialized(true);
-    }
+    });
 
     return () => unsubscribe();
-  }, []);
+  }, [handleSignOut]);
 
   // Fetch docs list once authenticated
   useEffect(() => {
@@ -348,9 +348,10 @@ function MarkdownViewerInner() {
   }, [router]);
 
   // Generate Table of Contents from markdown headings
+  const docContent = currentDoc?.content;
   const tocList: TocItem[] = useMemo(() => {
-    if (!currentDoc?.content) return [];
-    const lines = currentDoc.content.split("\n");
+    if (!docContent) return [];
+    const lines = docContent.split("\n");
     const headings: TocItem[] = [];
 
     lines.forEach((line) => {
@@ -367,7 +368,7 @@ function MarkdownViewerInner() {
     });
 
     return headings;
-  }, [currentDoc?.content]);
+  }, [docContent]);
 
   // Scroll spy for TOC
   const scrollToHeading = (id: string) => {
@@ -638,7 +639,7 @@ function MarkdownViewerInner() {
             {loading ? (
               <div className="p-6 text-center text-xs text-zinc-400">Loading document tree...</div>
             ) : Object.keys(groupedDocs).length === 0 ? (
-              <div className="p-6 text-center text-xs text-zinc-400">No documents match "{searchQuery}"</div>
+              <div className="p-6 text-center text-xs text-zinc-400">No documents match &quot;{searchQuery}&quot;</div>
             ) : (
               Object.entries(groupedDocs).map(([category, items]) => {
                 const isCollapsed = collapsedCategories[category];
@@ -881,7 +882,7 @@ function MarkdownViewerInner() {
                         {children}
                       </td>
                     ),
-                    pre: ({ children }: any) => {
+                    pre: ({ children }: { children?: React.ReactNode }) => {
                       return (
                         <div className={`my-4 rounded-xl border overflow-hidden font-mono text-xs ${
                           isDark ? "bg-[#14161F] border-[#272B3C]" : "bg-[#F8F9FB] border-zinc-200 shadow-xs"
@@ -890,7 +891,7 @@ function MarkdownViewerInner() {
                         </div>
                       );
                     },
-                    code: ({ className, children, ...props }: any) => {
+                    code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code">) => {
                       const isBlock = Boolean(className?.includes("language-") || (typeof children === "string" && children.includes("\n")));
                       const rawCode = String(children).replace(/\n$/, "");
                       const langMatch = className?.match(/language-(\w+)/);

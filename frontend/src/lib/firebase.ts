@@ -50,7 +50,7 @@ if (typeof window !== "undefined") {
   });
 }
 
-export function trackAnalyticsEvent(eventName: string, params?: Record<string, any>): void {
+export function trackAnalyticsEvent(eventName: string, params?: Record<string, unknown>): void {
   if (typeof window === "undefined" || !analytics) return;
   try {
     logEvent(analytics, eventName, params);

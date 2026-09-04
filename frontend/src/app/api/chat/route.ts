@@ -30,9 +30,10 @@ export async function POST(req: NextRequest) {
 
     const data = await pyRes.json();
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to reach Python RAG server";
     return NextResponse.json(
-      { error: `API route proxy error: ${error.message || "Failed to reach Python RAG server"}` },
+      { error: `API route proxy error: ${message}` },
       { status: 500 }
     );
   }

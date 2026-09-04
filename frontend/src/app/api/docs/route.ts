@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
           readingTimeMinutes,
           lastModified: stats.mtime.toISOString(),
         });
-      } catch (err: any) {
+      } catch {
         return NextResponse.json({ error: `Document '${requestedFile}' not found` }, { status: 404 });
       }
     }
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
             });
           }
         }
-      } catch (e) {
+      } catch {
         // ignore scan errors
       }
     }
@@ -115,7 +115,8 @@ export async function GET(req: NextRequest) {
       total: allFiles.length,
       documents: allFiles,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to load docs" }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to load docs";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

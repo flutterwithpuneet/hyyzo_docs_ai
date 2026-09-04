@@ -8,11 +8,9 @@ import {
   setDoc,
   getDoc,
   getDocs,
-  deleteDoc,
   query,
   where,
   orderBy,
-  serverTimestamp,
   increment,
   writeBatch
 } from "firebase/firestore";
@@ -281,7 +279,7 @@ export async function shareConversationToFirestore(
       authorName,
       sharedAt: new Date().toISOString()
     }));
-  } catch (e) {}
+  } catch {}
 
   return shareId;
 }
@@ -321,7 +319,7 @@ export async function fetchSharedConversation(shareId: string): Promise<SharedCo
     if (raw) {
       return JSON.parse(raw);
     }
-  } catch (e) {}
+  } catch {}
 
   return null;
 }
@@ -748,12 +746,13 @@ export async function verifyMobileRegistrationAndRateLimit(
         status: userData?.status || "active"
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Firestore verification error:", error);
+    const message = error instanceof Error ? error.message : "Failed to verify mobile registration with Firestore.";
     return {
       allowed: false,
       errorType: "FIRESTORE_ERROR",
-      message: error.message || "Failed to verify mobile registration with Firestore."
+      message
     };
   }
 }
@@ -858,9 +857,10 @@ export async function registerAuthorizedUserInFirestore(
       { merge: true }
     );
     return { success: true, message: `Successfully registered & approved ${cleanId} in Firestore!` };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error registering user in Firestore:", err);
-    return { success: false, message: err.message || "Failed to register user in Firestore." };
+    const message = err instanceof Error ? err.message : "Failed to register user in Firestore.";
+    return { success: false, message };
   }
 }
 
@@ -896,7 +896,7 @@ export async function verifyEmailRegistration(rawEmail: string): Promise<EmailVe
 
   try {
     // 1. Check registered_users by document ID (e.g. registered_users/name@company.com)
-    let emailDocRef = doc(db, "registered_users", email);
+    const emailDocRef = doc(db, "registered_users", email);
     let snapshot = await getDoc(emailDocRef);
 
     // 2. If not found by doc ID, query registered_users by 'email' field
@@ -953,12 +953,13 @@ export async function verifyEmailRegistration(rawEmail: string): Promise<EmailVe
         status: data?.status || "active"
       }
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error verifying email in Firestore:", err);
+    const message = err instanceof Error ? err.message : "Failed to verify Google account authorization with Firestore.";
     return {
       allowed: false,
       errorType: "FIRESTORE_ERROR",
-      message: err.message || "Failed to verify Google account authorization with Firestore."
+      message
     };
   }
 }

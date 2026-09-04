@@ -16,8 +16,7 @@ import {
   verifyMobileRegistrationAndRateLimit,
   verifyEmailRegistration,
   recordOtpAttemptToFirestore,
-  registerAuthorizedUserInFirestore,
-  cleanPhoneNumber
+  registerAuthorizedUserInFirestore
 } from "@/lib/firestoreService";
 import {
   ShieldCheck,
@@ -51,6 +50,10 @@ declare global {
   }
 }
 
+function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
   // Mobile OTP States (Fixed to Indian +91)
   const countryCode = "+91";
@@ -69,7 +72,6 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPhoneInput, setAdminPhoneInput] = useState("");
   const [adminNameInput, setAdminNameInput] = useState("");
-  const [adminPasskey, setAdminPasskey] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -91,7 +93,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       if (window.recaptchaVerifier) {
         try {
           window.recaptchaVerifier.clear();
-        } catch (_) {}
+        } catch {}
         window.recaptchaVerifier = undefined;
       }
       const container = document.getElementById("recaptcha-container");
@@ -125,7 +127,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       });
       window.recaptchaVerifier = appVerifier;
       return appVerifier;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Recaptcha initialization error:", err);
       cleanupRecaptcha();
       return null;
@@ -188,20 +190,21 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         setResendTimer(30);
         setSuccessMsg(`(Demo) Verification code sent to ${fullPhoneNumber}. (Enter any 6 digits e.g. 123456)`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Phone Auth error:", err);
-      let msg = err.message || "Failed to send OTP.";
-      if (err.code === "auth/invalid-phone-number") {
+      const error = err as { message?: string; code?: string };
+      let msg = error.message || "Failed to send OTP.";
+      if (error.code === "auth/invalid-phone-number") {
         msg = "The phone number format is invalid. Please enter 10 digits.";
-      } else if (err.code === "auth/too-many-requests") {
+      } else if (error.code === "auth/too-many-requests") {
         msg = "Too many requests. Please wait a few minutes before requesting another OTP.";
-      } else if (err.code === "auth/quota-exceeded") {
+      } else if (error.code === "auth/quota-exceeded") {
         msg = "SMS quota exceeded for today. Please try signing in with Google.";
-      } else if (err.code === "auth/operation-not-allowed") {
+      } else if (error.code === "auth/operation-not-allowed") {
         msg = "SMS not enabled for India (+91) in Firebase. Enable Phone Auth & add India under Authentication > Settings > SMS Region Policy, or add this number in 'Phone numbers for testing' (e.g. OTP 123456).";
-      } else if (err.code === "auth/billing-not-enabled") {
+      } else if (error.code === "auth/billing-not-enabled") {
         msg = "Firebase Free Plan (Spark) requires Phone Numbers for Testing: Go to Firebase Console > Authentication > Sign-in method > Phone > 'Phone numbers for testing', add +91 9460448575 with test code 123456 to test for free without billing!";
-      } else if (err.code === "auth/missing-phone-number") {
+      } else if (error.code === "auth/missing-phone-number") {
         msg = "Please provide a valid phone number.";
       }
       setErrorMsg(msg);
@@ -249,7 +252,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         await new Promise((resolve) => setTimeout(resolve, 600));
         const fullPhoneNumber = countryCode + phoneNumber;
         const demoUser: AuthUser = {
-          uid: "phone_usr_" + Math.random().toString(36).substring(2, 9),
+          uid: "phone_usr_" + generateId(),
           email: null,
           phoneNumber: fullPhoneNumber,
           displayName: `User (${fullPhoneNumber})`,
@@ -266,12 +269,13 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       } else {
         throw new Error("No active OTP session found. Please click 'Resend OTP'.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("OTP verification error:", err);
-      let msg = err.message || "Invalid OTP code.";
-      if (err.code === "auth/invalid-verification-code") {
+      const error = err as { message?: string; code?: string };
+      let msg = error.message || "Invalid OTP code.";
+      if (error.code === "auth/invalid-verification-code") {
         msg = "The verification code is incorrect. Please check and try again.";
-      } else if (err.code === "auth/code-expired") {
+      } else if (error.code === "auth/code-expired") {
         msg = "The verification code has expired. Please request a new OTP.";
       }
       setErrorMsg(msg);
@@ -326,7 +330,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         // Seamless Google Auth Demo
         await new Promise((resolve) => setTimeout(resolve, 700));
         const demoGoogleUser: AuthUser = {
-          uid: "g_usr_" + Math.random().toString(36).substring(2, 9),
+          uid: "g_usr_" + generateId(),
           email: "alex.developer@hyyzo.com",
           phoneNumber: "+91 9876543210",
           displayName: "Alex Developer",
@@ -341,18 +345,19 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         setSuccessMsg("Signed in with Google!");
         setTimeout(() => onLoginSuccess(demoGoogleUser), 600);
       }
-    } catch (err: any) {
-      if (err.code === "auth/popup-closed-by-user") {
+    } catch (err: unknown) {
+      const error = err as { message?: string; code?: string };
+      if (error.code === "auth/popup-closed-by-user") {
         console.info("Google sign-in popup was closed before completion.");
-      } else if (err.code === "auth/popup-blocked") {
+      } else if (error.code === "auth/popup-blocked") {
         setErrorMsg("Sign-in popup was blocked by your browser. Please allow popups for localhost.");
-      } else if (err.code === "auth/cancelled-popup-request") {
+      } else if (error.code === "auth/cancelled-popup-request") {
         // Another popup request was opened
-      } else if (err.code === "auth/unauthorized-domain") {
+      } else if (error.code === "auth/unauthorized-domain") {
         setErrorMsg("This domain is not authorized in Firebase Console > Authentication > Settings > Authorized domains.");
       } else {
         console.error("Google Auth error:", err);
-        setErrorMsg(err.message || "Google sign-in could not be completed.");
+        setErrorMsg(error.message || "Google sign-in could not be completed.");
       }
     } finally {
       setLoading(false);
@@ -388,8 +393,9 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
       } else {
         setAdminFeedback({ type: "error", text: res.message });
       }
-    } catch (e: any) {
-      setAdminFeedback({ type: "error", text: e.message || "Failed to register user." });
+    } catch (e: unknown) {
+      const error = e as { message?: string };
+      setAdminFeedback({ type: "error", text: error.message || "Failed to register user." });
     } finally {
       setAdminLoading(false);
     }

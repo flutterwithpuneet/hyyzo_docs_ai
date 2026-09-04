@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import {
   Sparkles,
   Plus,
   Trash2,
-  Send,
   RefreshCw,
   FileText,
   MessageSquare,
   Bot,
-  User,
   Folder,
   ChevronDown,
   ChevronRight,
@@ -31,40 +30,33 @@ import {
   Mic,
   RotateCcw,
   Command,
-  HelpCircle,
   X,
-  Sliders,
   Database,
   Cpu,
   Layers,
   Code2,
   CheckCircle2,
-  AlertCircle,
   LogOut,
   Clock,
   BookOpen,
   ExternalLink,
   Share2,
-  Link2,
   GitFork
 } from "lucide-react";
 import VercelLogin, { AuthUser } from "@/components/VercelLogin";
-import { auth, fbSignOut, onAuthStateChanged, trackAnalyticsEvent } from "@/lib/firebase";
+import { auth, fbSignOut, onAuthStateChanged } from "@/lib/firebase";
 import {
   fetchUserConversationsFromFirestore,
   syncConversationToFirestore,
   deleteConversationFromFirestore,
   recordGlobalFeedback,
-  initializeSession,
   isSessionExpired,
   clearSession,
-  getRemainingSessionTimeMinutes,
   refreshLastActivity,
   shareConversationToFirestore,
   fetchSharedConversation,
   ChatSession,
-  Message,
-  SourceItem
+  Message
 } from "@/lib/firestoreService";
 
 interface DocFile {
@@ -80,13 +72,34 @@ const INITIAL_DEFAULT_CHAT: ChatSession = {
   createdAt: "Just now"
 };
 
+function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 function WorldClassAIAssistantInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const shareIdQuery = searchParams?.get("shareId");
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [authInitialized, setAuthInitialized] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("hyyzo_auth_user");
+      if (savedUser) {
+        try {
+          if (!isSessionExpired()) {
+            return JSON.parse(savedUser);
+          } else {
+            clearSession();
+            localStorage.removeItem("hyyzo_auth_user");
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return null;
+  });
+  const [authInitialized, setAuthInitialized] = useState(!auth);
   const [chats, setChats] = useState<ChatSession[]>([INITIAL_DEFAULT_CHAT]);
   const [currentChatId, setCurrentChatId] = useState<string>("session-default");
   const [input, setInput] = useState("");
@@ -105,7 +118,13 @@ function WorldClassAIAssistantInner() {
   const [isReindexing, setIsReindexing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("hyyzo-theme") as "dark" | "light" | null;
+      if (savedTheme === "dark" || savedTheme === "light") return savedTheme;
+    }
+    return "dark";
+  });
   const [expandedSources, setExpandedSources] = useState<{ [key: string]: boolean }>({});
   const [searchFilter, setSearchFilter] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -114,7 +133,12 @@ function WorldClassAIAssistantInner() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSignOut = async (customMessage?: string) => {
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const handleSignOut = useCallback(async (customMessage?: string) => {
     if (auth) {
       try {
         await fbSignOut(auth);
@@ -126,48 +150,94 @@ function WorldClassAIAssistantInner() {
     localStorage.removeItem("hyyzo_auth_user");
     setCurrentUser(null);
     showToast(customMessage || "Signed out successfully");
-  };
+  }, [showToast]);
+
+  const handleSetTheme = useCallback((newTheme: "dark" | "light") => {
+    setTheme(newTheme);
+    localStorage.setItem("hyyzo-theme", newTheme);
+  }, []);
+
+  const handleModelSelect = useCallback(async (newModel: string) => {
+    setModelSelected(newModel);
+    try {
+      const res = await fetch("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: newModel })
+      });
+      if (res.ok) {
+        showToast(`Switched active AI model to ${newModel}`);
+      }
+    } catch (e) {
+      console.error("Model select error:", e);
+    }
+  }, [showToast]);
+
+  const handleNewChat = useCallback(() => {
+    const newId = generateId();
+    const newSession: ChatSession = {
+      id: newId,
+      title: "New Session",
+      messages: [],
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      model: modelSelected
+    };
+    setChats((prev) => [newSession, ...prev]);
+    setCurrentChatId(newId);
+    if (currentUser?.uid) {
+      syncConversationToFirestore(currentUser.uid, newSession);
+    }
+    showToast("Created new conversation session");
+  }, [currentUser, modelSelected, showToast]);
+
+  const handleDeleteChat = useCallback((idToDelete: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChats((prev) => {
+      if (prev.length <= 1) return prev;
+      const filtered = prev.filter((c) => c.id !== idToDelete);
+      setCurrentChatId((prevId) => (prevId === idToDelete ? filtered[0].id : prevId));
+      return filtered;
+    });
+    if (currentUser?.uid) {
+      deleteConversationFromFirestore(currentUser.uid, idToDelete);
+    }
+    showToast("Conversation deleted");
+  }, [currentUser, showToast]);
+
+  // Sync theme class on HTML element
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+      document.documentElement.classList.remove("light");
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+    }
+  }, [theme]);
 
   // Load auth state and Firebase listener with 1-hour session enforcement
   useEffect(() => {
-    const savedUser = localStorage.getItem("hyyzo_auth_user");
-    if (savedUser) {
-      try {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
         if (isSessionExpired()) {
           handleSignOut("Your session expired after 1 hour. Please sign in again.");
         } else {
-          setCurrentUser(JSON.parse(savedUser));
+          const authUser: AuthUser = {
+            uid: fbUser.uid,
+            email: fbUser.email,
+            displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
+            photoURL: fbUser.photoURL
+          };
+          setCurrentUser(authUser);
+          localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
         }
-      } catch (e) {
-        console.error("Local auth parsing error:", e);
       }
-    }
-
-    let unsubscribe = () => {};
-    if (auth) {
-      unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-        if (fbUser) {
-          if (isSessionExpired()) {
-            handleSignOut("Your session expired after 1 hour. Please sign in again.");
-          } else {
-            const authUser: AuthUser = {
-              uid: fbUser.uid,
-              email: fbUser.email,
-              displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
-              photoURL: fbUser.photoURL
-            };
-            setCurrentUser(authUser);
-            localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
-          }
-        }
-        setAuthInitialized(true);
-      });
-    } else {
       setAuthInitialized(true);
-    }
+    });
 
     return () => unsubscribe();
-  }, []);
+  }, [handleSignOut]);
 
   // Fetch Firestore conversation history when authenticated user is present
   useEffect(() => {
@@ -206,39 +276,39 @@ function WorldClassAIAssistantInner() {
       window.removeEventListener("keydown", onUserActivity);
       window.removeEventListener("click", onUserActivity);
     };
-  }, [currentUser]);
-
-  // Sync theme with localStorage
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("hyyzo-theme") as "dark" | "light" | null;
-    if (savedTheme && (savedTheme === "dark" || savedTheme === "light")) {
-      setTheme(savedTheme);
-      if (savedTheme === "dark") {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-      } else {
-        document.documentElement.classList.remove("dark");
-        document.documentElement.classList.add("light");
-      }
-    }
-  }, []);
-
-  const handleSetTheme = (newTheme: "dark" | "light") => {
-    setTheme(newTheme);
-    localStorage.setItem("hyyzo-theme", newTheme);
-    if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-    } else {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("light");
-    }
-  };
+  }, [currentUser, handleSignOut]);
 
   // Initial server connection checks
   useEffect(() => {
-    checkHealth();
-    fetchDocsList();
+    let ignore = false;
+    async function loadInitialData() {
+      try {
+        const res = await fetch("http://localhost:8000/api/health");
+        if (res.ok) {
+          const data = await res.json();
+          if (!ignore) setServerHealthy(data.engine_ready);
+        } else {
+          if (!ignore) setServerHealthy(false);
+        }
+      } catch {
+        if (!ignore) setServerHealthy(false);
+      }
+
+      try {
+        const res = await fetch("http://localhost:8000/api/docs-list");
+        if (res.ok) {
+          const data = await res.json();
+          if (!ignore) setDocFiles(data.files || []);
+        }
+      } catch (e) {
+        console.error("Docs list fetch error:", e);
+      }
+    }
+
+    loadInitialData();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -278,87 +348,9 @@ function WorldClassAIAssistantInner() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const checkHealth = async () => {
-    try {
-      const res = await fetch("http://localhost:8000/api/health");
-      if (res.ok) {
-        const data = await res.json();
-        setServerHealthy(data.engine_ready);
-      } else {
-        setServerHealthy(false);
-      }
-    } catch {
-      setServerHealthy(false);
-    }
-  };
-
-  const fetchDocsList = async () => {
-    try {
-      const res = await fetch("http://localhost:8000/api/docs-list");
-      if (res.ok) {
-        const data = await res.json();
-        setDocFiles(data.files || []);
-      }
-    } catch (e) {
-      console.error("Docs list fetch error:", e);
-    }
-  };
-
-  const handleModelSelect = async (newModel: string) => {
-    setModelSelected(newModel);
-    try {
-      const res = await fetch("/api/model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: newModel })
-      });
-      if (res.ok) {
-        showToast(`Switched active AI model to ${newModel}`);
-      }
-    } catch (e) {
-      console.error("Model select error:", e);
-    }
-  };
+  }, [handleNewChat]);
 
   const currentChat = chats.find((c) => c.id === currentChatId) || chats[0];
-
-  const handleNewChat = () => {
-    const newId = Math.random().toString(36).substring(2, 9);
-    const newSession: ChatSession = {
-      id: newId,
-      title: "New Session",
-      messages: [],
-      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      model: modelSelected
-    };
-    setChats((prev) => [newSession, ...prev]);
-    setCurrentChatId(newId);
-    if (currentUser?.uid) {
-      syncConversationToFirestore(currentUser.uid, newSession);
-    }
-    showToast("Created new conversation session");
-  };
-
-  const handleDeleteChat = (idToDelete: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (chats.length <= 1) return;
-    const filtered = chats.filter((c) => c.id !== idToDelete);
-    setChats(filtered);
-    if (currentChatId === idToDelete) {
-      setCurrentChatId(filtered[0].id);
-    }
-    if (currentUser?.uid) {
-      deleteConversationFromFirestore(currentUser.uid, idToDelete);
-    }
-    showToast("Conversation deleted");
-  };
 
   const handleRateMessage = async (msgId: string, rating: "like" | "dislike") => {
     if (!currentChat) return;
@@ -411,7 +403,7 @@ function WorldClassAIAssistantInner() {
     if (!queryText || isLoading) return;
 
     const userMsg: Message = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: generateId(),
       role: "user",
       content: queryText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -460,7 +452,7 @@ function WorldClassAIAssistantInner() {
       const data = await res.json();
 
       const assistantMsg: Message = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         role: "assistant",
         content: data.answer,
         sources: data.sources || [],
@@ -480,11 +472,12 @@ function WorldClassAIAssistantInner() {
           return session;
         })
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { message?: string };
       const errorMsg: Message = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         role: "assistant",
-        content: `⚠️ **Service Error**: ${err.message || "Failed to communicate with RAG Server."}`,
+        content: `⚠️ **Service Error**: ${error.message || "Failed to communicate with RAG Server."}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setChats((prev) =>
@@ -568,7 +561,7 @@ function WorldClassAIAssistantInner() {
       }
     }
     loadShared();
-  }, [currentUser, shareIdQuery]);
+  }, [currentUser, shareIdQuery, showToast]);
 
   const handleOpenShareModal = async () => {
     const active = chats.find((c) => c.id === currentChatId);
@@ -698,9 +691,11 @@ function WorldClassAIAssistantInner() {
         {/* Brand Header */}
         <div className="p-4 pb-2 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img
+            <Image
               src="/icon.png"
               alt="Hyyzo Logo"
+              width={28}
+              height={28}
               className="w-7 h-7 rounded-full object-contain shadow-sm shrink-0"
             />
             <div>
@@ -937,9 +932,11 @@ function WorldClassAIAssistantInner() {
                 >
                   <PanelLeftOpen className="w-4 h-4" />
                 </button>
-                <img
+                <Image
                   src="/logo.png"
                   alt="Hyyzo Logo"
+                  width={24}
+                  height={24}
                   className="w-6 h-6 rounded-full shadow-sm"
                 />
               </div>
@@ -1213,7 +1210,7 @@ function WorldClassAIAssistantInner() {
                               </div>
                               {src.snippet && (
                                 <p className={`text-[11px] line-clamp-2 italic ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                  "{src.snippet}"
+                                  &quot;{src.snippet}&quot;
                                 </p>
                               )}
                             </div>
