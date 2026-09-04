@@ -151,6 +151,29 @@ def list_docs():
 
     return {"files": files}
 
+@app.get("/api/doc-content")
+def get_doc_content(file: str):
+    docs_path = Path(DOCS_DIR)
+    safe_rel = file.lstrip("/\\")
+    target_path = (docs_path / safe_rel).resolve()
+    
+    if not str(target_path).startswith(str(docs_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    try:
+        content = target_path.read_text(encoding="utf-8")
+        return {
+            "name": target_path.name,
+            "path": safe_rel.replace("\\", "/"),
+            "content": content,
+            "size_bytes": target_path.stat().st_size
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

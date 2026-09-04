@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import {
   Sparkles,
@@ -40,7 +41,9 @@ import {
   CheckCircle2,
   AlertCircle,
   LogOut,
-  Clock
+  Clock,
+  BookOpen,
+  ExternalLink
 } from "lucide-react";
 import VercelLogin, { AuthUser } from "@/components/VercelLogin";
 import { auth, fbSignOut, onAuthStateChanged, trackAnalyticsEvent } from "@/lib/firebase";
@@ -73,6 +76,7 @@ const INITIAL_DEFAULT_CHAT: ChatSession = {
 };
 
 export default function WorldClassAIAssistant() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [chats, setChats] = useState<ChatSession[]>([INITIAL_DEFAULT_CHAT]);
@@ -576,9 +580,29 @@ export default function WorldClassAIAssistant() {
       
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl border shadow-lg bg-[#2563EB] text-white border-blue-400/40 text-xs font-medium animate-in fade-in slide-in-from-top-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl border shadow-2xl text-xs font-semibold backdrop-blur-xl transition-all animate-in fade-in slide-in-from-top-2 duration-200 ${
+          toastMessage.includes("👎") || toastMessage.toLowerCase().includes("failed") || toastMessage.toLowerCase().includes("deleted")
+            ? theme === 'dark'
+              ? 'bg-[#1C1618]/95 text-rose-200 border-rose-500/40 shadow-rose-950/40'
+              : 'bg-rose-50/95 text-rose-900 border-rose-200 shadow-rose-100'
+            : toastMessage.includes("👍") || toastMessage.toLowerCase().includes("copied") || toastMessage.toLowerCase().includes("success") || toastMessage.toLowerCase().includes("welcome")
+            ? theme === 'dark'
+              ? 'bg-[#111915]/95 text-emerald-200 border-emerald-500/40 shadow-emerald-950/40'
+              : 'bg-emerald-50/95 text-emerald-900 border-emerald-200 shadow-emerald-100'
+            : theme === 'dark'
+            ? 'bg-[#151926]/95 text-blue-200 border-blue-500/40 shadow-blue-950/40'
+            : 'bg-blue-50/95 text-blue-900 border-blue-200 shadow-blue-100'
+        }`}>
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+            toastMessage.includes("👎") || toastMessage.toLowerCase().includes("failed") || toastMessage.toLowerCase().includes("deleted")
+              ? 'bg-rose-500/20 text-rose-400'
+              : toastMessage.includes("👍") || toastMessage.toLowerCase().includes("copied") || toastMessage.toLowerCase().includes("success") || toastMessage.toLowerCase().includes("welcome")
+              ? 'bg-emerald-500/20 text-emerald-400'
+              : 'bg-blue-500/20 text-blue-400'
+          }`}>
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </div>
+          <span className="font-medium tracking-tight">{toastMessage}</span>
         </div>
       )}
 
@@ -759,6 +783,26 @@ export default function WorldClassAIAssistant() {
           </button>
 
           <button
+            onClick={() => router.push("/markdown_viewer")}
+            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+              theme === 'dark'
+                ? 'border-blue-500/30 bg-blue-600/10 hover:bg-blue-600/20 text-blue-300'
+                : 'border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-xs'
+            }`}
+            title="Open Notion-style Markdown Documentation Viewer"
+          >
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+              <span className="font-semibold">Markdown Viewer</span>
+            </div>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+              theme === 'dark' ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-200 text-blue-800'
+            }`}>
+              15 Docs
+            </span>
+          </button>
+
+          <button
             onClick={() => setShowDocsModal(true)}
             className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-between transition ${
               theme === 'dark'
@@ -860,6 +904,20 @@ export default function WorldClassAIAssistant() {
               <span className={`w-1.5 h-1.5 rounded-full ${serverHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`} />
               <span>{serverHealthy ? "Engine Ready" : "Disconnected"}</span>
             </div>
+
+            {/* Docs Viewer Navigation Button */}
+            <button
+              onClick={() => router.push("/markdown_viewer")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-blue-600/10 hover:bg-blue-600/20 border-blue-500/30 text-blue-300'
+                  : 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 shadow-xs'
+              }`}
+              title="Open Notion-style Markdown Documentation Viewer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+              <span className="hidden sm:inline">Docs Viewer</span>
+            </button>
 
             {/* Shortcuts Guide Button */}
             <button
@@ -1001,13 +1059,21 @@ export default function WorldClassAIAssistant() {
                       {expandedSources[msg.id] && (
                         <div className={`mt-2 space-y-2 pl-3 border-l-2 ${theme === 'dark' ? 'border-[#2A2D35]' : 'border-zinc-300'}`}>
                           {msg.sources.map((src, i) => (
-                            <div key={i} className={`p-2.5 rounded-xl border text-xs space-y-1 ${
-                              theme === 'dark'
-                                ? 'bg-[#181A20] border-[#2A2D35]'
-                                : 'bg-white border-[#E5E7EB] shadow-xs'
-                            }`}>
+                            <div
+                              key={i}
+                              onClick={() => router.push(`/markdown_viewer?file=${encodeURIComponent(src.file)}`)}
+                              className={`p-2.5 rounded-xl border text-xs space-y-1 cursor-pointer transition group/src ${
+                                theme === 'dark'
+                                  ? 'bg-[#181A20] hover:bg-[#1E212B] border-[#2A2D35] hover:border-blue-500/50'
+                                  : 'bg-white hover:bg-blue-50/40 border-[#E5E7EB] hover:border-blue-300 shadow-xs'
+                              }`}
+                              title="Click to view full document in Markdown Viewer"
+                            >
                               <div className="flex items-center justify-between font-medium text-blue-500">
-                                <span>📄 {src.file}</span>
+                                <span className="flex items-center gap-1.5 group-hover/src:underline">
+                                  <span>📄 {src.file}</span>
+                                  <ExternalLink className="w-3 h-3 opacity-0 group-hover/src:opacity-100 transition-opacity" />
+                                </span>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                                   theme === 'dark' ? 'bg-[#22252E] text-zinc-400' : 'bg-zinc-100 text-zinc-600'
                                 }`}>
@@ -1233,13 +1299,26 @@ export default function WorldClassAIAssistant() {
                 <div className="text-center py-8 text-xs text-zinc-400">No document files found in `docs/`.</div>
               ) : (
                 docFiles.map((file, idx) => (
-                  <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
-                    theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-50 border-zinc-200'
-                  }`}>
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setShowDocsModal(false);
+                      router.push(`/markdown_viewer?file=${encodeURIComponent(file.path)}`);
+                    }}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs cursor-pointer transition group/doc ${
+                      theme === 'dark'
+                        ? 'bg-[#0F1117] hover:bg-[#1A1D27] border-[#2A2D35] hover:border-blue-500/50'
+                        : 'bg-zinc-50 hover:bg-white border-zinc-200 hover:border-blue-300 shadow-xs'
+                    }`}
+                    title="Open in Markdown Viewer"
+                  >
                     <div className="flex items-center gap-2.5 truncate">
                       <FileText className="w-4 h-4 text-blue-500 shrink-0" />
                       <div>
-                        <div className="font-semibold">{file.name}</div>
+                        <div className="font-semibold group-hover/doc:text-blue-500 flex items-center gap-1.5 transition">
+                          <span>{file.name}</span>
+                          <ExternalLink className="w-3 h-3 opacity-0 group-hover/doc:opacity-100 transition-opacity" />
+                        </div>
                         <div className="text-[10px] text-zinc-400 font-mono">{file.path}</div>
                       </div>
                     </div>
