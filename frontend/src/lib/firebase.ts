@@ -4,14 +4,15 @@ import {
   Auth,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
+  ConfirmationResult,
   signOut as fbSignOut,
   onAuthStateChanged,
   User
 } from "firebase/auth";
-import { getAnalytics, isSupported, Analytics } from "firebase/analytics";
+import { getFirestore, Firestore } from "firebase/firestore";
+import { getAnalytics, isSupported, Analytics, logEvent } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCvOEdbQiA-rd6_etAMrWSro9zjeZPfUwA",
@@ -32,11 +33,13 @@ export const isRealFirebaseConfigured = Boolean(
 
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
+let db: Firestore | undefined;
 let analytics: Analytics | undefined;
 
 if (typeof window !== "undefined") {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
+  db = getFirestore(app);
 
   isSupported().then((supported) => {
     if (supported && app) {
@@ -47,6 +50,27 @@ if (typeof window !== "undefined") {
   });
 }
 
-export { app, auth, analytics, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, fbSignOut, onAuthStateChanged };
+export function trackAnalyticsEvent(eventName: string, params?: Record<string, any>): void {
+  if (typeof window === "undefined" || !analytics) return;
+  try {
+    logEvent(analytics, eventName, params);
+  } catch (err) {
+    console.debug("Analytics event error:", err);
+  }
+}
+
+export {
+  app,
+  auth,
+  db,
+  analytics,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
+  type ConfirmationResult,
+  fbSignOut,
+  onAuthStateChanged
+};
 export type { User };
 

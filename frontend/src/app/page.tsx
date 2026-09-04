@@ -39,31 +39,25 @@ import {
   Code2,
   CheckCircle2,
   AlertCircle,
-  LogOut
+  LogOut,
+  Clock
 } from "lucide-react";
 import VercelLogin, { AuthUser } from "@/components/VercelLogin";
-import { auth, fbSignOut, onAuthStateChanged } from "@/lib/firebase";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  sources?: SourceItem[];
-  timestamp: string;
-}
-
-interface SourceItem {
-  file: string;
-  score: string;
-  snippet?: string;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: string;
-}
+import { auth, fbSignOut, onAuthStateChanged, trackAnalyticsEvent } from "@/lib/firebase";
+import {
+  fetchUserConversationsFromFirestore,
+  syncConversationToFirestore,
+  deleteConversationFromFirestore,
+  recordGlobalFeedback,
+  initializeSession,
+  isSessionExpired,
+  clearSession,
+  getRemainingSessionTimeMinutes,
+  refreshLastActivity,
+  ChatSession,
+  Message,
+  SourceItem
+} from "@/lib/firestoreService";
 
 interface DocFile {
   name: string;
@@ -104,12 +98,30 @@ export default function WorldClassAIAssistant() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load auth state and Firebase listener
+  const handleSignOut = async (customMessage?: string) => {
+    if (auth) {
+      try {
+        await fbSignOut(auth);
+      } catch (e) {
+        console.error("Sign out error:", e);
+      }
+    }
+    clearSession();
+    localStorage.removeItem("hyyzo_auth_user");
+    setCurrentUser(null);
+    showToast(customMessage || "Signed out successfully");
+  };
+
+  // Load auth state and Firebase listener with 1-hour session enforcement
   useEffect(() => {
     const savedUser = localStorage.getItem("hyyzo_auth_user");
     if (savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        if (isSessionExpired()) {
+          handleSignOut("Your session expired after 1 hour. Please sign in again.");
+        } else {
+          setCurrentUser(JSON.parse(savedUser));
+        }
       } catch (e) {
         console.error("Local auth parsing error:", e);
       }
@@ -119,14 +131,18 @@ export default function WorldClassAIAssistant() {
     if (auth) {
       unsubscribe = onAuthStateChanged(auth, (fbUser) => {
         if (fbUser) {
-          const authUser: AuthUser = {
-            uid: fbUser.uid,
-            email: fbUser.email,
-            displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
-            photoURL: fbUser.photoURL
-          };
-          setCurrentUser(authUser);
-          localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
+          if (isSessionExpired()) {
+            handleSignOut("Your session expired after 1 hour. Please sign in again.");
+          } else {
+            const authUser: AuthUser = {
+              uid: fbUser.uid,
+              email: fbUser.email,
+              displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Hyyzo User",
+              photoURL: fbUser.photoURL
+            };
+            setCurrentUser(authUser);
+            localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
+          }
         }
         setAuthInitialized(true);
       });
@@ -137,18 +153,44 @@ export default function WorldClassAIAssistant() {
     return () => unsubscribe();
   }, []);
 
-  const handleSignOut = async () => {
-    if (auth) {
-      try {
-        await fbSignOut(auth);
-      } catch (e) {
-        console.error("Sign out error:", e);
-      }
+  // Fetch Firestore conversation history when authenticated user is present
+  useEffect(() => {
+    if (currentUser?.uid) {
+      fetchUserConversationsFromFirestore(currentUser.uid).then((loadedSessions) => {
+        if (loadedSessions && loadedSessions.length > 0) {
+          setChats(loadedSessions);
+          setCurrentChatId(loadedSessions[0].id);
+        }
+      });
     }
-    localStorage.removeItem("hyyzo_auth_user");
-    setCurrentUser(null);
-    showToast("Signed out successfully");
-  };
+  }, [currentUser?.uid]);
+
+  // Periodic 1-Hour Auto-Logout Watcher & User Activity Refresh
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Check expiration every 15 seconds
+    const interval = setInterval(() => {
+      if (isSessionExpired()) {
+        handleSignOut("Session expired after 1 hour limit. Please sign in again.");
+      }
+    }, 15000);
+
+    const onUserActivity = () => {
+      refreshLastActivity();
+    };
+
+    window.addEventListener("mousemove", onUserActivity, { passive: true });
+    window.addEventListener("keydown", onUserActivity, { passive: true });
+    window.addEventListener("click", onUserActivity, { passive: true });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("mousemove", onUserActivity);
+      window.removeEventListener("keydown", onUserActivity);
+      window.removeEventListener("click", onUserActivity);
+    };
+  }, [currentUser]);
 
   // Sync theme with localStorage
   useEffect(() => {
@@ -258,10 +300,14 @@ export default function WorldClassAIAssistant() {
       id: newId,
       title: "New Session",
       messages: [],
-      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      model: modelSelected
     };
     setChats((prev) => [newSession, ...prev]);
     setCurrentChatId(newId);
+    if (currentUser?.uid) {
+      syncConversationToFirestore(currentUser.uid, newSession);
+    }
     showToast("Created new conversation session");
   };
 
@@ -273,7 +319,56 @@ export default function WorldClassAIAssistant() {
     if (currentChatId === idToDelete) {
       setCurrentChatId(filtered[0].id);
     }
-    showToast("Conversation deleted");
+    if (currentUser?.uid) {
+      deleteConversationFromFirestore(currentUser.uid, idToDelete);
+    }
+    showToast("Conversation deleted from Firestore");
+  };
+
+  const handleRateMessage = async (msgId: string, rating: "like" | "dislike") => {
+    if (!currentChat) return;
+    const msg = currentChat.messages.find((m) => m.id === msgId);
+    if (!msg) return;
+
+    // Find previous user prompt
+    const msgIdx = currentChat.messages.findIndex((m) => m.id === msgId);
+    const prevMsg = msgIdx > 0 ? currentChat.messages[msgIdx - 1] : null;
+    const questionText = prevMsg?.role === "user" ? prevMsg.content : "";
+
+    // Toggle if same clicked
+    const newRating = msg.rating === rating ? null : rating;
+
+    // Optimistic UI update
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === currentChat.id) {
+          const updatedMessages = c.messages.map((m) => (m.id === msgId ? { ...m, rating: newRating } : m));
+          const updatedChat = { ...c, messages: updatedMessages };
+          if (currentUser?.uid) {
+            syncConversationToFirestore(currentUser.uid, updatedChat);
+          }
+          return updatedChat;
+        }
+        return c;
+      })
+    );
+
+    if (newRating && currentUser) {
+      await recordGlobalFeedback({
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        conversationId: currentChat.id,
+        messageId: msg.id,
+        question: questionText,
+        response: msg.content,
+        rating: newRating,
+        sources: msg.sources,
+        model: modelSelected
+      });
+      showToast(newRating === "like" ? "Marked as helpful 👍 — Saved to Firestore" : "Feedback recorded 👎 — Saved to Firestore");
+    } else {
+      showToast("Feedback cleared");
+    }
   };
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -287,6 +382,8 @@ export default function WorldClassAIAssistant() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
+    let activeSessionToSync: ChatSession | null = null;
+
     setChats((prev) =>
       prev.map((session) => {
         if (session.id === currentChatId) {
@@ -297,11 +394,17 @@ export default function WorldClassAIAssistant() {
                 ? queryText.substring(0, 28) + "..."
                 : queryText
               : session.title;
-          return { ...session, title: newTitle, messages: updatedMessages };
+          const updated = { ...session, title: newTitle, messages: updatedMessages, model: modelSelected };
+          activeSessionToSync = updated;
+          return updated;
         }
         return session;
       })
     );
+
+    if (activeSessionToSync && currentUser?.uid) {
+      syncConversationToFirestore(currentUser.uid, activeSessionToSync);
+    }
 
     setInput("");
     setAttachedFile(null);
@@ -326,13 +429,18 @@ export default function WorldClassAIAssistant() {
         role: "assistant",
         content: data.answer,
         sources: data.sources || [],
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        rating: null
       };
 
       setChats((prev) =>
         prev.map((session) => {
           if (session.id === currentChatId) {
-            return { ...session, messages: [...session.messages, assistantMsg] };
+            const updated = { ...session, messages: [...session.messages, assistantMsg], model: modelSelected };
+            if (currentUser?.uid) {
+              syncConversationToFirestore(currentUser.uid, updated);
+            }
+            return updated;
           }
           return session;
         })
@@ -347,7 +455,11 @@ export default function WorldClassAIAssistant() {
       setChats((prev) =>
         prev.map((session) => {
           if (session.id === currentChatId) {
-            return { ...session, messages: [...session.messages, errorMsg] };
+            const updated = { ...session, messages: [...session.messages, errorMsg] };
+            if (currentUser?.uid) {
+              syncConversationToFirestore(currentUser.uid, updated);
+            }
+            return updated;
           }
           return session;
         })
@@ -433,7 +545,11 @@ export default function WorldClassAIAssistant() {
 
   const userInitials = currentUser?.displayName
     ? currentUser.displayName.substring(0, 2).toUpperCase()
-    : currentUser?.email?.substring(0, 2).toUpperCase() || "HY";
+    : currentUser?.email
+    ? currentUser.email.substring(0, 2).toUpperCase()
+    : currentUser?.phoneNumber
+    ? currentUser.phoneNumber.slice(-2)
+    : "HY";
 
   return (
     <div className={`flex h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-[#0F1117] text-[#F3F4F6]' : 'bg-[#FFFFFF] text-[#111827]'}`}>
@@ -499,14 +615,22 @@ export default function WorldClassAIAssistant() {
                   <div className="text-xs font-semibold truncate leading-tight">
                     {currentUser.displayName || "Hyyzo Member"}
                   </div>
-                  <div className={`text-[10px] truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                    {currentUser.email || "Authenticated"}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {currentUser.email || currentUser.phoneNumber || "Authenticated"}
+                    </span>
+                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono inline-flex items-center gap-0.5 ${
+                      theme === 'dark' ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-50 text-blue-600'
+                    }`} title="Active 1-hour secure session">
+                      <Clock className="w-2.5 h-2.5" />
+                      1h max
+                    </span>
                   </div>
                 </div>
               </div>
 
               <button
-                onClick={handleSignOut}
+                onClick={() => handleSignOut()}
                 className={`p-1.5 rounded-lg transition shrink-0 ${
                   theme === 'dark' ? 'text-zinc-400 hover:text-rose-400 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-rose-600 hover:bg-zinc-100'
                 }`}
@@ -635,7 +759,7 @@ export default function WorldClassAIAssistant() {
 
           <button
             onClick={() => setShowSettingsModal(true)}
-            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center gap-2 transition ${
+            className={`w-full py-2 px-3 rounded-lg border text-xs font-medium flex items-center gap-2 transition cursor-pointer ${
               theme === 'dark'
                 ? 'border-[#2A2D35] bg-[#0F1117]/60 hover:bg-[#22252E] text-zinc-300'
                 : 'border-[#E5E7EB] bg-white hover:bg-zinc-100 text-zinc-700 shadow-xs'
@@ -900,18 +1024,30 @@ export default function WorldClassAIAssistant() {
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => showToast("Feedback recorded: Helpful")}
-                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
-                        title="Good Response"
+                        onClick={() => handleRateMessage(msg.id, "like")}
+                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                          msg.rating === "like"
+                            ? "text-emerald-400 bg-emerald-500/20 border border-emerald-500/40"
+                            : theme === "dark"
+                              ? "text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]"
+                              : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                        }`}
+                        title="Good Response (Like)"
                       >
-                        <ThumbsUp className="w-3.5 h-3.5" />
+                        <ThumbsUp className={`w-3.5 h-3.5 ${msg.rating === "like" ? "fill-emerald-400/30" : ""}`} />
                       </button>
                       <button
-                        onClick={() => showToast("Feedback recorded: Needs Improvement")}
-                        className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
-                        title="Bad Response"
+                        onClick={() => handleRateMessage(msg.id, "dislike")}
+                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                          msg.rating === "dislike"
+                            ? "text-rose-400 bg-rose-500/20 border border-rose-500/40"
+                            : theme === "dark"
+                              ? "text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]"
+                              : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                        }`}
+                        title="Needs Improvement (Dislike)"
                       >
-                        <ThumbsDown className="w-3.5 h-3.5" />
+                        <ThumbsDown className={`w-3.5 h-3.5 ${msg.rating === "dislike" ? "fill-rose-400/30" : ""}`} />
                       </button>
                     </div>
                   )}

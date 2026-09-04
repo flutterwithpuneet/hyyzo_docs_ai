@@ -1,28 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   auth,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
+  ConfirmationResult,
   isRealFirebaseConfigured
 } from "@/lib/firebase";
+import { initializeSession } from "@/lib/firestoreService";
 import {
-  ArrowRight,
-  Eye,
-  EyeOff,
+  ShieldCheck,
   AlertCircle,
   CheckCircle2,
-  X,
-  KeyRound
+  ArrowRight,
+  RotateCcw,
+  Smartphone
 } from "lucide-react";
 
 export interface AuthUser {
   uid: string;
   email: string | null;
+  phoneNumber?: string | null;
   displayName: string | null;
   photoURL: string | null;
 }
@@ -32,78 +33,187 @@ interface VercelLoginProps {
   theme?: "dark" | "light";
 }
 
+declare global {
+  interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
+    confirmationResult?: ConfirmationResult;
+  }
+}
+
 export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  // Mobile OTP States (Fixed to Indian +91)
+  const countryCode = "+91";
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpStep, setOtpStep] = useState<"phone" | "otp">("phone");
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+
+  // Loading & Feedback
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  
-  // Forgot password modal state
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotMsg, setForgotMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [resendTimer, setResendTimer] = useState(0);
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setErrorMsg("Please provide both email and password.");
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+
+  // Timer countdown for OTP resend
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  // Clean up recaptcha on unmount
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (e) {
+          // ignore cleanup errors
+        }
+        window.recaptchaVerifier = undefined;
+      }
+    };
+  }, []);
+
+  const setupRecaptcha = () => {
+    if (typeof window === "undefined" || !auth) return null;
+    try {
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+          size: "invisible",
+          callback: () => {
+            // reCAPTCHA solved
+          },
+          "expired-callback": () => {
+            setErrorMsg("Security verification expired. Please try sending OTP again.");
+          }
+        });
+      }
+      return window.recaptchaVerifier;
+    } catch (err) {
+      console.error("Recaptcha initialization error:", err);
+      return null;
+    }
+  };
+
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const cleanNumber = phoneNumber.trim().replace(/[\s-]/g, "");
+    if (!cleanNumber || cleanNumber.length < 7) {
+      setErrorMsg("Please enter a valid mobile number.");
       return;
     }
-    setErrorMsg(null);
+
+    const fullPhoneNumber = countryCode.trim() + cleanNumber;
     setLoading(true);
 
     try {
       if (isRealFirebaseConfigured && auth) {
-        if (mode === "signup") {
-          const userCred = await createUserWithEmailAndPassword(auth, email, password);
-          const u = userCred.user;
-          const authUser: AuthUser = {
-            uid: u.uid,
-            email: u.email,
-            displayName: name || u.email?.split("@")[0] || "Hyyzo User",
-            photoURL: u.photoURL
-          };
-          setSuccessMsg("Account created successfully!");
-          setTimeout(() => onLoginSuccess(authUser), 600);
-        } else {
-          const userCred = await signInWithEmailAndPassword(auth, email, password);
-          const u = userCred.user;
-          const authUser: AuthUser = {
-            uid: u.uid,
-            email: u.email,
-            displayName: u.displayName || u.email?.split("@")[0] || "Hyyzo User",
-            photoURL: u.photoURL
-          };
-          setSuccessMsg("Welcome back!");
-          setTimeout(() => onLoginSuccess(authUser), 600);
+        const appVerifier = setupRecaptcha();
+        if (!appVerifier) {
+          throw new Error("Could not initialize security verification. Please refresh the page.");
         }
+
+        const confirmation = await signInWithPhoneNumber(auth, fullPhoneNumber, appVerifier);
+        window.confirmationResult = confirmation;
+        setConfirmationResult(confirmation);
+        setOtpStep("otp");
+        setResendTimer(45);
+        setSuccessMsg(`OTP sent successfully to ${fullPhoneNumber}`);
       } else {
-        // Instant Demo / Local Auth simulation when Firebase is in offline mode
-        await new Promise((resolve) => setTimeout(resolve, 650));
-        const demoUser: AuthUser = {
-          uid: "usr_" + Math.random().toString(36).substring(2, 9),
-          email: email,
-          displayName: name || email.split("@")[0] || "Hyyzo User",
-          photoURL: null
-        };
-        localStorage.setItem("hyyzo_auth_user", JSON.stringify(demoUser));
-        setSuccessMsg(mode === "signup" ? "Account created successfully!" : "Signed in successfully!");
-        setTimeout(() => onLoginSuccess(demoUser), 600);
+        // Instant Demo Mode fallback for local testing
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        setOtpStep("otp");
+        setResendTimer(30);
+        setSuccessMsg(`(Demo) Verification code sent to ${fullPhoneNumber}. (Enter any 6 digits e.g. 123456)`);
       }
     } catch (err: any) {
-      console.error("Auth error:", err);
-      let msg = err.message || "Authentication failed.";
-      if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        msg = "Invalid email or password.";
-      } else if (err.code === "auth/email-already-in-use") {
-        msg = "An account with this email already exists.";
-      } else if (err.code === "auth/weak-password") {
-        msg = "Password should be at least 6 characters.";
+      console.error("Phone Auth error:", err);
+      let msg = err.message || "Failed to send OTP.";
+      if (err.code === "auth/invalid-phone-number") {
+        msg = "The phone number format is invalid. Please include valid country code & digits.";
+      } else if (err.code === "auth/too-many-requests") {
+        msg = "Too many requests. Please wait a few minutes before requesting another OTP.";
+      } else if (err.code === "auth/quota-exceeded") {
+        msg = "SMS quota exceeded for today. Please try signing in with Google.";
+      } else if (err.code === "auth/missing-phone-number") {
+        msg = "Please provide a valid phone number.";
+      }
+      setErrorMsg(msg);
+      // Reset recaptcha verifier on error so user can retry
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (_) {}
+        window.recaptchaVerifier = undefined;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const cleanOtp = otpCode.trim();
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setErrorMsg("Please enter the complete 6-digit OTP code.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (isRealFirebaseConfigured && confirmationResult) {
+        const result = await confirmationResult.confirm(cleanOtp);
+        const u = result.user;
+        const authUser: AuthUser = {
+          uid: u.uid,
+          email: u.email,
+          phoneNumber: u.phoneNumber,
+          displayName: u.displayName || u.phoneNumber || "Hyyzo User",
+          photoURL: u.photoURL
+        };
+        initializeSession(authUser.uid);
+        localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
+        setSuccessMsg("Mobile verified successfully! Logging you in...");
+        setTimeout(() => onLoginSuccess(authUser), 600);
+      } else if (!isRealFirebaseConfigured) {
+        // Demo mode verification
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        const fullPhoneNumber = countryCode + phoneNumber;
+        const demoUser: AuthUser = {
+          uid: "phone_usr_" + Math.random().toString(36).substring(2, 9),
+          email: null,
+          phoneNumber: fullPhoneNumber,
+          displayName: `User (${fullPhoneNumber})`,
+          photoURL: null
+        };
+        initializeSession(demoUser.uid);
+        localStorage.setItem("hyyzo_auth_user", JSON.stringify(demoUser));
+        setSuccessMsg("Mobile verified successfully! Logging in...");
+        setTimeout(() => onLoginSuccess(demoUser), 600);
+      } else {
+        throw new Error("No active OTP session found. Please click 'Resend OTP'.");
+      }
+    } catch (err: any) {
+      console.error("OTP verification error:", err);
+      let msg = err.message || "Invalid OTP code.";
+      if (err.code === "auth/invalid-verification-code") {
+        msg = "The verification code is incorrect. Please check and try again.";
+      } else if (err.code === "auth/code-expired") {
+        msg = "The verification code has expired. Please request a new OTP.";
       }
       setErrorMsg(msg);
     } finally {
@@ -124,9 +234,12 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         const authUser: AuthUser = {
           uid: u.uid,
           email: u.email,
+          phoneNumber: u.phoneNumber,
           displayName: u.displayName || u.email?.split("@")[0] || "Google User",
           photoURL: u.photoURL
         };
+        initializeSession(authUser.uid);
+        localStorage.setItem("hyyzo_auth_user", JSON.stringify(authUser));
         setSuccessMsg("Signed in with Google!");
         setTimeout(() => onLoginSuccess(authUser), 600);
       } else {
@@ -135,16 +248,17 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         const demoGoogleUser: AuthUser = {
           uid: "g_usr_" + Math.random().toString(36).substring(2, 9),
           email: "alex.developer@hyyzo.com",
+          phoneNumber: "+91 9876543210",
           displayName: "Alex Developer",
           photoURL: null
         };
         localStorage.setItem("hyyzo_auth_user", JSON.stringify(demoGoogleUser));
+        initializeSession(demoGoogleUser.uid);
         setSuccessMsg("Signed in with Google!");
         setTimeout(() => onLoginSuccess(demoGoogleUser), 600);
       }
     } catch (err: any) {
       if (err.code === "auth/popup-closed-by-user") {
-        // User voluntarily closed the Google popup; do not treat as a hard failure
         console.info("Google sign-in popup was closed before completion.");
       } else if (err.code === "auth/popup-blocked") {
         setErrorMsg("Sign-in popup was blocked by your browser. Please allow popups for localhost.");
@@ -161,44 +275,18 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!forgotEmail) {
-      setForgotMsg({ type: "error", text: "Please enter your work email." });
-      return;
-    }
-    setForgotLoading(true);
-    setForgotMsg(null);
-
-    try {
-      if (isRealFirebaseConfigured && auth) {
-        await sendPasswordResetEmail(auth, forgotEmail);
-        setForgotMsg({ type: "success", text: "Password reset link sent to your email!" });
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        setForgotMsg({ type: "success", text: "Password reset link sent to your email (Demo Mode)." });
-      }
-    } catch (err: any) {
-      console.error("Password reset error:", err);
-      let msg = err.message || "Failed to send reset email.";
-      if (err.code === "auth/user-not-found") {
-        msg = "No account found with this email.";
-      }
-      setForgotMsg({ type: "error", text: msg });
-    } finally {
-      setForgotLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center px-4 relative overflow-hidden bg-[#060913] text-[#F1F5F9] selection:bg-blue-500 selection:text-white">
       
+      {/* Invisible container for Firebase Phone Auth Recaptcha */}
+      <div id="recaptcha-container" ref={recaptchaContainerRef} />
+
       {/* Background Deep Space & Cosmic Glow Elements */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Radial ambient glow top */}
         <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-gradient-to-b from-[#1d4ed8]/20 via-[#0369a1]/10 to-transparent blur-[110px]" />
         
-        {/* Subtle mesh background grid / constellation lines */}
+        {/* Subtle mesh background grid */}
         <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="grid-pattern" width="48" height="48" patternUnits="userSpaceOnUse">
@@ -234,9 +322,7 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           </div>
 
           <p className="text-sm text-slate-400 font-light tracking-wide">
-            {mode === "login"
-              ? "Sign in to access document-grounded intelligence"
-              : "Create an account to access document-grounded intelligence"}
+            Sign in to access document-grounded intelligence
           </p>
         </div>
 
@@ -278,11 +364,11 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         {/* OR Divider */}
         <div className="flex items-center justify-center gap-3 my-5">
           <div className="h-[1px] w-8 bg-slate-600/40" />
-          <span className="text-xs font-medium text-slate-400 tracking-wider">OR</span>
+          <span className="text-xs font-medium text-slate-400 tracking-wider">OR CONTINUE WITH OTP</span>
           <div className="h-[1px] w-8 bg-slate-600/40" />
         </div>
 
-        {/* Main Auth Glass Card */}
+        {/* Main Phone OTP Card */}
         <div className="p-6 sm:p-7 rounded-2xl bg-[#0b101d]/90 border border-[#1b253d] backdrop-blur-xl shadow-[0_15px_45px_rgba(0,0,0,0.65)] relative overflow-hidden">
           
           {/* Subtle card top edge glow */}
@@ -292,229 +378,150 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
           {errorMsg && (
             <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{errorMsg}</span>
+              <span className="leading-relaxed">{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
             <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>{successMsg}</span>
+              <span className="leading-relaxed">{successMsg}</span>
             </div>
           )}
 
-          {/* Email & Password Form */}
-          <form onSubmit={handleEmailAuth} className="space-y-4">
-            
-            {/* Full Name field when registering */}
-            {mode === "signup" && (
+          {/* STEP 1: Enter Mobile Number */}
+          {otpStep === "phone" ? (
+            <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1.5">
-                  Full Name
+                <label className="block text-sm font-medium text-slate-200 mb-1.5 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-sky-400" />
+                  <span>Mobile Phone Number</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Puneet Sharma"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition-all shadow-[0_0_12px_rgba(30,64,175,0.2)]"
-                  />
+                
+                <div className="flex gap-2">
+                  {/* Fixed Indian Country Code Prefix */}
+                  <div className="bg-[#070b15] border-2 border-[#1e40af] rounded-xl px-3.5 py-3 text-sm text-white font-mono flex items-center gap-1.5 shadow-[0_0_12px_rgba(30,64,175,0.2)] select-none shrink-0">
+                    <span className="text-base leading-none">🇮🇳</span>
+                    <span className="font-semibold text-slate-200">+91</span>
+                  </div>
+
+                  {/* Phone Input (10 Digits) */}
+                  <div className="relative flex-1">
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="98765 43210"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                      className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition-all font-mono tracking-wider shadow-[0_0_12px_rgba(30,64,175,0.2)]"
+                      autoFocus
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* Work Email Field */}
-            <div>
-              <label className="block text-sm font-medium text-slate-200 mb-1.5">
-                Work Email
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  placeholder="name@hyyzo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition-all shadow-[0_0_12px_rgba(30,64,175,0.2)]"
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            <div>
-              <label className="block text-sm font-medium text-slate-200 mb-1.5">
-                Password
-              </label>
-              <div className="relative flex items-center">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 rounded-xl px-4 py-3 pr-11 text-sm text-white placeholder-slate-500 outline-none transition-all shadow-[0_0_12px_rgba(30,64,175,0.2)]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 p-1 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4 opacity-75" />
-                  ) : (
-                    <Eye className="w-4 h-4 opacity-75" />
-                  )}
-                </button>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Enter 10-digit Indian mobile number to receive 6-digit OTP via SMS.
+                </p>
               </div>
 
-              {/* Forgot Password Link (Only in Login Mode) */}
-              {mode === "login" && (
-                <div className="mt-2 text-left">
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading || !phoneNumber.trim()}
+                className="w-full py-3 px-4 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-[#0284c7] via-[#1d4ed8] to-[#2563eb] hover:from-[#0369a1] hover:via-[#1e40af] hover:to-[#1d4ed8] flex items-center justify-center gap-2 shadow-[0_4px_22px_rgba(37,99,235,0.4)] hover:shadow-[0_4px_28px_rgba(37,99,235,0.65)] transition-all duration-200 mt-5 active:scale-[0.99] cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Send Verification Code</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            /* STEP 2: Enter 6-digit OTP */
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium text-slate-200 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Enter 6-Digit OTP</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
-                      setForgotEmail(email);
-                      setForgotMsg(null);
-                      setShowForgotModal(true);
+                      setOtpStep("phone");
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
                     }}
-                    className="text-xs text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
+                    className="text-xs text-sky-400 hover:text-sky-300 underline underline-offset-2 cursor-pointer transition-colors"
                   >
-                    Forgot Password?
+                    Change Number
                   </button>
                 </div>
-              )}
-            </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-[#0284c7] via-[#1d4ed8] to-[#2563eb] hover:from-[#0369a1] hover:via-[#1e40af] hover:to-[#1d4ed8] flex items-center justify-center gap-2 shadow-[0_4px_22px_rgba(37,99,235,0.4)] hover:shadow-[0_4px_28px_rgba(37,99,235,0.65)] transition-all duration-200 mt-5 active:scale-[0.99] cursor-pointer disabled:opacity-60"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <span>{mode === "login" ? "Sign In" : "Create Account"}</span>
-                  <span className="text-base leading-none">→</span>
-                </>
-              )}
-            </button>
-          </form>
+                <div className="text-xs text-slate-400 mb-3">
+                  Sent to <span className="font-mono text-white font-semibold">{countryCode} {phoneNumber}</span>
+                </div>
 
-          {/* Bottom Switcher: Need an account? Register here. */}
-          <div className="text-center mt-6 text-xs text-slate-400">
-            {mode === "login" ? (
-              <p>
-                Need an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setErrorMsg(null);
-                  }}
-                  className="font-medium text-slate-200 hover:text-white underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  Register here.
-                </button>
-              </p>
-            ) : (
-              <p>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setErrorMsg(null);
-                  }}
-                  className="font-medium text-slate-200 hover:text-white underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  Sign in here.
-                </button>
-              </p>
-            )}
-          </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    required
+                    placeholder="• • • • • •"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
+                    className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 rounded-xl px-4 py-3 text-center text-xl tracking-[0.5em] font-mono text-white placeholder-slate-600 outline-none transition-all shadow-[0_0_12px_rgba(30,64,175,0.2)]"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {/* Verify OTP Button */}
+              <button
+                type="submit"
+                disabled={loading || otpCode.trim().length < 6}
+                className="w-full py-3 px-4 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 hover:from-emerald-500 hover:via-teal-500 hover:to-blue-500 flex items-center justify-center gap-2 shadow-[0_4px_22px_rgba(16,185,129,0.35)] hover:shadow-[0_4px_28px_rgba(16,185,129,0.5)] transition-all duration-200 mt-4 active:scale-[0.99] cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Verify & Sign In</span>
+                    <ShieldCheck className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {/* Resend Code Section */}
+              <div className="flex items-center justify-center pt-2 text-xs">
+                {resendTimer > 0 ? (
+                  <span className="text-slate-500">
+                    Resend OTP in <span className="font-mono text-slate-300 font-semibold">{resendTimer}s</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSendOtp()}
+                    disabled={loading}
+                    className="text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Resend OTP Code</span>
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
 
         </div>
 
       </div>
-
-      {/* Forgot Password Modal Dialog */}
-      {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md p-6 rounded-2xl bg-[#0c1222] border border-[#23314e] shadow-2xl relative">
-            <button
-              onClick={() => setShowForgotModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                <KeyRound className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-white">Reset your password</h3>
-                <p className="text-xs text-slate-400">We'll send a password reset link to your email.</p>
-              </div>
-            </div>
-
-            {forgotMsg && (
-              <div className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
-                forgotMsg.type === "success"
-                  ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
-                  : "bg-rose-500/10 border border-rose-500/30 text-rose-300"
-              }`}>
-                {forgotMsg.type === "success" ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                )}
-                <span>{forgotMsg.text}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Work Email</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@hyyzo.com"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full bg-[#070b15] border-2 border-[#1e40af] focus:border-[#38bdf8] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-all shadow-[0_0_10px_rgba(30,64,175,0.2)]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={forgotLoading}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-60"
-                >
-                  {forgotLoading ? (
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <span>Send Reset Link</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );
