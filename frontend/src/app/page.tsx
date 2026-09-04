@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import {
   Sparkles,
@@ -43,7 +43,10 @@ import {
   LogOut,
   Clock,
   BookOpen,
-  ExternalLink
+  ExternalLink,
+  Share2,
+  Link2,
+  GitFork
 } from "lucide-react";
 import VercelLogin, { AuthUser } from "@/components/VercelLogin";
 import { auth, fbSignOut, onAuthStateChanged, trackAnalyticsEvent } from "@/lib/firebase";
@@ -57,6 +60,8 @@ import {
   clearSession,
   getRemainingSessionTimeMinutes,
   refreshLastActivity,
+  shareConversationToFirestore,
+  fetchSharedConversation,
   ChatSession,
   Message,
   SourceItem
@@ -75,8 +80,11 @@ const INITIAL_DEFAULT_CHAT: ChatSession = {
   createdAt: "Just now"
 };
 
-export default function WorldClassAIAssistant() {
+function WorldClassAIAssistantInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const shareIdQuery = searchParams?.get("shareId");
+
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [chats, setChats] = useState<ChatSession[]>([INITIAL_DEFAULT_CHAT]);
@@ -91,6 +99,9 @@ export default function WorldClassAIAssistant() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [sharedAuthorInfo, setSharedAuthorInfo] = useState<{ authorName: string; sharedAt: string; isSharedView: boolean } | null>(null);
   const [isReindexing, setIsReindexing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
@@ -528,6 +539,72 @@ export default function WorldClassAIAssistant() {
     setExpandedSources((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
   };
 
+  // Load shared conversation if shareId query parameter is present
+  useEffect(() => {
+    if (!currentUser || !shareIdQuery) return;
+    const currentUid = currentUser.uid;
+    const targetShareId = shareIdQuery;
+
+    async function loadShared() {
+      try {
+        const data = await fetchSharedConversation(targetShareId);
+        if (data && data.chat) {
+          setChats((prev) => {
+            const exists = prev.some((c) => c.id === data.chat.id);
+            return exists ? prev : [data.chat, ...prev];
+          });
+          setCurrentChatId(data.chat.id);
+          setSharedAuthorInfo({
+            authorName: data.authorName,
+            sharedAt: data.sharedAt,
+            isSharedView: data.authorUid !== currentUid
+          });
+          showToast(`Loaded shared chat from ${data.authorName} 💬`);
+        } else {
+          showToast("Shared conversation not found or expired");
+        }
+      } catch (e) {
+        console.error("Failed to load shared conversation:", e);
+      }
+    }
+    loadShared();
+  }, [currentUser, shareIdQuery]);
+
+  const handleOpenShareModal = async () => {
+    const active = chats.find((c) => c.id === currentChatId);
+    if (!active || active.messages.length === 0) {
+      showToast("Start a conversation first before sharing 💬");
+      return;
+    }
+    if (currentUser) {
+      await shareConversationToFirestore(
+        currentUser.uid,
+        currentUser.displayName || currentUser.email || "Hyyzo Member",
+        active
+      );
+    }
+    setShowShareModal(true);
+  };
+
+  const handleForkConversation = () => {
+    const active = chats.find((c) => c.id === currentChatId);
+    if (!active) return;
+    const forkedId = `session-${Date.now()}`;
+    const forkedChat: ChatSession = {
+      ...active,
+      id: forkedId,
+      title: `${active.title} (Forked)`,
+      createdAt: "Just now"
+    };
+    setChats((prev) => [forkedChat, ...prev]);
+    setCurrentChatId(forkedId);
+    setSharedAuthorInfo(null);
+    if (currentUser) {
+      syncConversationToFirestore(currentUser.uid, forkedChat);
+    }
+    showToast("Forked conversation to your personal chats 🚀");
+  };
+
   const promptSuggestions = [
     {
       title: "Explain Rewards Architecture",
@@ -919,6 +996,22 @@ export default function WorldClassAIAssistant() {
               <span className="hidden sm:inline">Docs Viewer</span>
             </button>
 
+            {/* Share Chat Button */}
+            {currentChat && currentChat.messages.length > 0 && (
+              <button
+                onClick={handleOpenShareModal}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-[#181A20] hover:bg-[#22252E] border-[#2A2D35] text-zinc-300'
+                    : 'bg-white hover:bg-zinc-50 border-zinc-200 text-zinc-700 shadow-xs'
+                }`}
+                title="Share this conversation with a link"
+              >
+                <Share2 className="w-3.5 h-3.5 text-blue-500" />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            )}
+
             {/* Shortcuts Guide Button */}
             <button
               onClick={() => setShowShortcutsModal(true)}
@@ -988,6 +1081,44 @@ export default function WorldClassAIAssistant() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Shared Conversation Banner */}
+          {sharedAuthorInfo && (
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200 ${
+              theme === 'dark'
+                ? 'bg-blue-950/20 border-blue-500/30 text-blue-200'
+                : 'bg-blue-50/80 border-blue-200 text-blue-900 shadow-xs'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  theme === 'dark' ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600'
+                }`}>
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span>Shared by {sharedAuthorInfo.authorName}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                      theme === 'dark' ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      Public Link
+                    </span>
+                  </div>
+                  <p className={`text-[11px] mt-0.5 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    You have full access to inspect all responses, sources, and continue this discussion.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleForkConversation}
+                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0 self-end sm:self-center active:scale-[0.98]"
+              >
+                <GitFork className="w-3.5 h-3.5" />
+                <span>Fork to My Chats</span>
+              </button>
             </div>
           )}
 
@@ -1542,6 +1673,141 @@ export default function WorldClassAIAssistant() {
         </div>
       )}
 
+      {/* --------------------------------------------------------- */}
+      {/* SHARE CONVERSATION MODAL */}
+      {/* --------------------------------------------------------- */}
+      {showShareModal && currentChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl space-y-5 ${
+            theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-white' : 'bg-white border-[#E5E7EB] text-zinc-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3 border-inherit">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  theme === 'dark' ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600'
+                }`}>
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Share Conversation</h3>
+                  <p className={`text-[11px] ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    Anyone with this link can view this full AI discussion
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className={`p-1 rounded-lg ${theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-400' : 'hover:bg-zinc-100 text-zinc-600'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Conversation Summary Card */}
+            <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${
+              theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-50 border-zinc-200'
+            }`}>
+              <div className="font-semibold text-sm truncate">{currentChat.title}</div>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400">
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                  {currentChat.messages.length} messages
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5 text-emerald-500" />
+                  {modelSelected}
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                  {currentChat.createdAt}
+                </span>
+              </div>
+            </div>
+
+            {/* Live Share URL Input + Copy Button */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-400 block">Shareable Link</label>
+              <div className={`flex items-center rounded-xl border p-1.5 gap-2 ${
+                theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-100 border-zinc-200'
+              }`}>
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?shareId=${currentChat.id}`}
+                  className="bg-transparent text-xs outline-none px-2 flex-1 font-mono text-blue-500 select-all truncate"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const shareUrl = `${window.location.origin}/?shareId=${currentChat.id}`;
+                    navigator.clipboard.writeText(shareUrl);
+                    setShareLinkCopied(true);
+                    showToast("Shareable link copied to clipboard 🔗");
+                    setTimeout(() => setShareLinkCopied(false), 2000);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    shareLinkCopied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {shareLinkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{shareLinkCopied ? "Copied!" : "Copy Link"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Security Notice */}
+            <div className={`p-3 rounded-xl border text-[11px] flex items-start gap-2.5 ${
+              theme === 'dark' ? 'bg-blue-950/20 border-blue-800/30 text-blue-300' : 'bg-blue-50/70 border-blue-200 text-blue-900'
+            }`}>
+              <Sparkles className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+              <span>
+                <strong>Admin Security:</strong> Friends opening this link must sign in with an approved account to view responses, sources, and continue the conversation.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-inherit">
+              <button
+                type="button"
+                onClick={() => {
+                  const transcript = currentChat.messages
+                    .map((m) => `### ${m.role === 'user' ? 'User' : 'Hyyzo AI'}:\n${m.content}\n`)
+                    .join('\n---\n\n');
+                  navigator.clipboard.writeText(transcript);
+                  showToast("Conversation transcript copied 📋");
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer flex items-center gap-1.5 ${
+                  theme === 'dark' ? 'border-[#2A2D35] hover:bg-[#22252E] text-zinc-300' : 'border-zinc-200 hover:bg-zinc-100 text-zinc-700'
+                }`}
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Transcript</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+  );
+}
+
+export default function WorldClassAIAssistant() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-[#0F1117] text-white text-sm">Loading Hyyzo Assistant...</div>}>
+      <WorldClassAIAssistantInner />
+    </Suspense>
   );
 }

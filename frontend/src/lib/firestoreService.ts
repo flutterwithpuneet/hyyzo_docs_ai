@@ -225,6 +225,107 @@ export async function deleteConversationFromFirestore(uid: string, conversationI
   }
 }
 
+export interface SharedConversationData {
+  chat: ChatSession;
+  authorUid: string;
+  authorName: string;
+  sharedAt: string;
+}
+
+/**
+ * Persist conversation to top-level 'shared_conversations' collection for shareable links
+ */
+export async function shareConversationToFirestore(
+  authorUid: string,
+  authorName: string,
+  chat: ChatSession
+): Promise<string> {
+  const shareId = chat.id || `share-${Date.now()}`;
+
+  if (isRealFirebaseConfigured && db) {
+    try {
+      const shareDocRef = doc(db, "shared_conversations", shareId);
+      const nowIso = new Date().toISOString();
+      await setDoc(
+        shareDocRef,
+        {
+          id: shareId,
+          authorUid: authorUid || "(not define)",
+          authorName: authorName || "Hyyzo Member",
+          title: chat.title || "Shared Conversation",
+          createdAt: chat.createdAt || nowIso,
+          sharedAt: nowIso,
+          model: chat.model || "gemini-flash-latest",
+          messagesCount: chat.messages.length,
+          messages: chat.messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            sources: m.sources || [],
+            timestamp: m.timestamp || nowIso,
+            rating: m.rating || "(not define)"
+          }))
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error("Error sharing conversation to Firestore:", e);
+    }
+  }
+
+  // Also store in localStorage as fallback
+  try {
+    localStorage.setItem(`hyyzo_shared_${shareId}`, JSON.stringify({
+      chat,
+      authorUid,
+      authorName,
+      sharedAt: new Date().toISOString()
+    }));
+  } catch (e) {}
+
+  return shareId;
+}
+
+/**
+ * Fetch a shared conversation from Firestore by shareId
+ */
+export async function fetchSharedConversation(shareId: string): Promise<SharedConversationData | null> {
+  if (isRealFirebaseConfigured && db) {
+    try {
+      const shareDocRef = doc(db, "shared_conversations", shareId);
+      const snap = await getDoc(shareDocRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const chat: ChatSession = {
+          id: data.id || shareId,
+          title: data.title || "Shared Conversation",
+          createdAt: data.createdAt || "Shared",
+          model: data.model || "gemini-flash-latest",
+          messages: data.messages || []
+        };
+        return {
+          chat,
+          authorUid: data.authorUid || "(not define)",
+          authorName: data.authorName || "Hyyzo Member",
+          sharedAt: data.sharedAt || new Date().toISOString()
+        };
+      }
+    } catch (e) {
+      console.error("Error fetching shared conversation from Firestore:", e);
+    }
+  }
+
+  // Fallback to local storage
+  try {
+    const raw = localStorage.getItem(`hyyzo_shared_${shareId}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 // -------------------------------------------------------------
 // 3. GLOBAL LIKE / DISLIKE FEEDBACK MANAGEMENT
 // -------------------------------------------------------------

@@ -78,6 +78,83 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Frontend": <Globe className="w-4 h-4 text-indigo-500" />,
 };
 
+function MarkdownViewerLoader({
+  subtitle = "Verifying authorization & decrypting document...",
+  targetFile,
+  theme = "dark",
+}: {
+  subtitle?: string;
+  targetFile?: string | null;
+  theme?: "dark" | "light";
+}) {
+  const isDark = theme === "dark";
+  return (
+    <div className={`h-screen w-screen flex flex-col items-center justify-center p-6 relative overflow-hidden transition-colors ${
+      isDark ? "bg-[#0D0E12] text-zinc-200" : "bg-[#F8F9FA] text-zinc-800"
+    }`}>
+      {/* Ambient background glow */}
+      <div className={`absolute w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-20 -top-20 -left-20 ${
+        isDark ? "bg-blue-600" : "bg-blue-400"
+      }`} />
+      <div className={`absolute w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-20 -bottom-20 -right-20 ${
+        isDark ? "bg-indigo-600" : "bg-indigo-300"
+      }`} />
+
+      {/* Center Loader Card */}
+      <div className={`relative max-w-sm w-full rounded-2xl border p-7 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center space-y-5 animate-in fade-in zoom-in-95 duration-300 ${
+        isDark ? "bg-[#13151D]/90 border-[#222533] shadow-black/60" : "bg-white/95 border-zinc-200 shadow-xl shadow-zinc-900/5"
+      }`}>
+        
+        {/* Brand Icon with Spinner Ring */}
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 p-0.5 shadow-lg shadow-blue-500/25">
+            <div className={`w-full h-full rounded-2xl flex items-center justify-center ${
+              isDark ? "bg-[#13151D]" : "bg-white"
+            }`}>
+              <Sparkles className="w-7 h-7 text-blue-500 animate-pulse" />
+            </div>
+          </div>
+          {/* Outer rotating dashed ring */}
+          <div className="absolute -inset-2 border-2 border-blue-500/30 border-dashed rounded-full animate-spin [animation-duration:8s]" />
+        </div>
+
+        {/* Title and Subtitle */}
+        <div className="space-y-1.5">
+          <h3 className={`text-base font-bold tracking-tight ${isDark ? "text-zinc-100" : "text-zinc-900"}`}>
+            Hyyzo Technical Docs
+          </h3>
+          <p className="text-xs text-zinc-400 font-medium">
+            {subtitle}
+          </p>
+        </div>
+
+        {/* Target Document Badge if present */}
+        {targetFile && (
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-mono max-w-full truncate ${
+            isDark ? "bg-[#181A24] border-[#292D3D] text-blue-400" : "bg-blue-50 border-blue-200 text-blue-700"
+          }`}>
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{targetFile}</span>
+          </div>
+        )}
+
+        {/* Animated Progress Bar */}
+        <div className={`w-full h-1.5 rounded-full overflow-hidden ${
+          isDark ? "bg-zinc-800" : "bg-zinc-100"
+        }`}>
+          <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 rounded-full animate-pulse w-full" />
+        </div>
+
+        {/* Security / Admin Badge */}
+        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 font-medium">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Role-Based Access Control Active</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MarkdownViewerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -356,15 +433,25 @@ function MarkdownViewerInner() {
     );
   }
 
-  // Loading Screen while verifying session
+  // Loading Screen while verifying session or initial document fetch
   if (!authInitialized) {
     return (
-      <div className={`h-screen w-screen flex flex-col items-center justify-center space-y-3 ${
-        isDark ? "bg-[#0D0E12] text-zinc-300" : "bg-[#F8F9FA] text-zinc-700"
-      }`}>
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-        <p className="text-xs font-medium">Verifying authorization & security keys...</p>
-      </div>
+      <MarkdownViewerLoader
+        subtitle="Verifying authorization & security keys..."
+        targetFile={fileQuery}
+        theme={theme}
+      />
+    );
+  }
+
+  // Initial load when user is authorized but document list & initial doc are loading
+  if (currentUser && loading && !currentDoc) {
+    return (
+      <MarkdownViewerLoader
+        subtitle="Decrypting technical specification..."
+        targetFile={fileQuery || selectedFile}
+        theme={theme}
+      />
     );
   }
 
@@ -1024,7 +1111,7 @@ function MarkdownViewerInner() {
 
 export default function MarkdownViewerPage() {
   return (
-    <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-zinc-950 text-white text-sm">Loading Documentation Viewer...</div>}>
+    <Suspense fallback={<MarkdownViewerLoader subtitle="Preparing Hyyzo Documentation Engine..." />}>
       <MarkdownViewerInner />
     </Suspense>
   );
