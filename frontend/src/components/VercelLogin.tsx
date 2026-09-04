@@ -86,37 +86,48 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // Clean up recaptcha on unmount
-  useEffect(() => {
-    return () => {
+  const cleanupRecaptcha = () => {
+    if (typeof window !== "undefined") {
       if (window.recaptchaVerifier) {
         try {
           window.recaptchaVerifier.clear();
-        } catch (e) {
-          // ignore cleanup errors
-        }
+        } catch (_) {}
         window.recaptchaVerifier = undefined;
       }
+      const container = document.getElementById("recaptcha-container");
+      if (container) {
+        container.innerHTML = "";
+      }
+    }
+  };
+
+  // Clean up recaptcha on unmount
+  useEffect(() => {
+    return () => {
+      cleanupRecaptcha();
     };
   }, []);
 
   const setupRecaptcha = () => {
     if (typeof window === "undefined" || !auth) return null;
     try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-          size: "invisible",
-          callback: () => {
-            // reCAPTCHA solved
-          },
-          "expired-callback": () => {
-            setErrorMsg("Security verification expired. Please try sending OTP again.");
-          }
-        });
-      }
-      return window.recaptchaVerifier;
-    } catch (err) {
+      cleanupRecaptcha();
+
+      const appVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        callback: () => {
+          // reCAPTCHA solved
+        },
+        "expired-callback": () => {
+          setErrorMsg("Security verification expired. Please try sending OTP again.");
+          cleanupRecaptcha();
+        }
+      });
+      window.recaptchaVerifier = appVerifier;
+      return appVerifier;
+    } catch (err: any) {
       console.error("Recaptcha initialization error:", err);
+      cleanupRecaptcha();
       return null;
     }
   };
@@ -186,17 +197,16 @@ export default function VercelLogin({ onLoginSuccess }: VercelLoginProps) {
         msg = "Too many requests. Please wait a few minutes before requesting another OTP.";
       } else if (err.code === "auth/quota-exceeded") {
         msg = "SMS quota exceeded for today. Please try signing in with Google.";
+      } else if (err.code === "auth/operation-not-allowed") {
+        msg = "SMS not enabled for India (+91) in Firebase. Enable Phone Auth & add India under Authentication > Settings > SMS Region Policy, or add this number in 'Phone numbers for testing' (e.g. OTP 123456).";
+      } else if (err.code === "auth/billing-not-enabled") {
+        msg = "Firebase Free Plan (Spark) requires Phone Numbers for Testing: Go to Firebase Console > Authentication > Sign-in method > Phone > 'Phone numbers for testing', add +91 9460448575 with test code 123456 to test for free without billing!";
       } else if (err.code === "auth/missing-phone-number") {
         msg = "Please provide a valid phone number.";
       }
       setErrorMsg(msg);
-      // Reset recaptcha verifier on error so user can retry
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (_) {}
-        window.recaptchaVerifier = undefined;
-      }
+      // Clean up recaptcha verifier on error so subsequent retries never fail
+      cleanupRecaptcha();
     } finally {
       setLoading(false);
     }

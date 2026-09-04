@@ -86,6 +86,7 @@ export default function WorldClassAIAssistant() {
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
   const [isReindexing, setIsReindexing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
@@ -229,16 +230,35 @@ export default function WorldClassAIAssistant() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chats, currentChatId, isLoading]);
 
-  // Keyboard shortcut listener (Ctrl+K or Cmd+K for new chat, Esc for modals)
+  // Keyboard shortcut listener (Ctrl+K for new chat, Alt+L / Ctrl+Shift+Q for logout, Ctrl+/ for shortcuts, Esc for modals)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      // Ctrl+K or Cmd+K: New Chat
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         handleNewChat();
-      } else if (e.key === "Escape") {
+      }
+      // Alt+L or Ctrl+Shift+Q: Open Sign Out Confirmation Modal
+      else if ((e.altKey && e.key.toLowerCase() === "l") || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "q")) {
+        e.preventDefault();
+        setShowLogoutConfirmModal(true);
+      }
+      // Ctrl+/ or Cmd+/: Toggle Keyboard Shortcuts Modal
+      else if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+      // Ctrl+B or Cmd+B: Toggle Sidebar
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setSidebarOpen((prev) => !prev);
+      }
+      // Escape: Close all open modals
+      else if (e.key === "Escape") {
         setShowDocsModal(false);
         setShowSettingsModal(false);
         setShowShortcutsModal(false);
+        setShowLogoutConfirmModal(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -322,7 +342,7 @@ export default function WorldClassAIAssistant() {
     if (currentUser?.uid) {
       deleteConversationFromFirestore(currentUser.uid, idToDelete);
     }
-    showToast("Conversation deleted from Firestore");
+    showToast("Conversation deleted");
   };
 
   const handleRateMessage = async (msgId: string, rating: "like" | "dislike") => {
@@ -365,7 +385,7 @@ export default function WorldClassAIAssistant() {
         sources: msg.sources,
         model: modelSelected
       });
-      showToast(newRating === "like" ? "Marked as helpful 👍 — Saved to Firestore" : "Feedback recorded 👎 — Saved to Firestore");
+      showToast(newRating === "like" ? "Marked as helpful 👍" : "Feedback recorded 👎");
     } else {
       showToast("Feedback cleared");
     }
@@ -630,11 +650,11 @@ export default function WorldClassAIAssistant() {
               </div>
 
               <button
-                onClick={() => handleSignOut()}
-                className={`p-1.5 rounded-lg transition shrink-0 ${
+                onClick={() => setShowLogoutConfirmModal(true)}
+                className={`p-1.5 rounded-lg transition shrink-0 cursor-pointer ${
                   theme === 'dark' ? 'text-zinc-400 hover:text-rose-400 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-rose-600 hover:bg-zinc-100'
                 }`}
-                title="Sign Out"
+                title="Sign Out (Alt + L)"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -1341,21 +1361,103 @@ export default function WorldClassAIAssistant() {
 
             <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">New Conversation</span>
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>New Conversation</span>
                 <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Ctrl + K</kbd>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Send Message</span>
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Send Message</span>
                 <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Enter</kbd>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Add Line Break</span>
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Add Line Break</span>
                 <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Shift + Enter</kbd>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Close Modals</span>
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Toggle Sidebar</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Ctrl + B</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Shortcuts Help</span>
+                <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Ctrl + /</kbd>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-500/15">
+                <span className="text-rose-400 font-medium">Sign Out / Logout</span>
+                <kbd className="px-2 py-1 rounded bg-rose-500/15 text-rose-400 font-mono text-[10px] font-semibold">Alt + L</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Close All Modals</span>
                 <kbd className="px-2 py-1 rounded bg-zinc-500/20 font-mono text-[10px]">Esc</kbd>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------- */}
+      {/* CONFIRM LOGOUT MODAL */}
+      {/* --------------------------------------------------------- */}
+      {showLogoutConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl space-y-4 ${
+            theme === 'dark' ? 'bg-[#181A20] border-[#2A2D35] text-white' : 'bg-white border-[#E5E7EB] text-zinc-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-500/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+                  <LogOut className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Confirm Sign Out</h3>
+                  <p className={`text-[11px] ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    End your active session on this device
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLogoutConfirmModal(false)}
+                className={`p-1.5 rounded-lg ${theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-400' : 'hover:bg-zinc-100 text-zinc-600'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+              theme === 'dark' ? 'bg-[#0F1117] border-[#2A2D35]' : 'bg-zinc-50 border-zinc-200'
+            }`}>
+              <div className="text-zinc-400 text-[11px]">Signing out will end the session for:</div>
+              <div className="font-semibold text-sm">
+                {currentUser?.displayName || "User"}
+              </div>
+              <div className="text-xs text-zinc-400 font-mono truncate">
+                {currentUser?.email || currentUser?.phoneNumber || "Active Member"}
+              </div>
+            </div>
+
+            <p className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              Are you sure you want to log out? You will need to verify via Mobile OTP or Google Sign-In next time you log in.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-500/20">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirmModal(false)}
+                className={`px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                  theme === 'dark' ? 'hover:bg-[#22252E] text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirmModal(false);
+                  handleSignOut("You have been signed out successfully.");
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-rose-500/20 active:scale-[0.98]"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Confirm Sign Out</span>
+              </button>
             </div>
           </div>
         </div>
