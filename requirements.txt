@@ -13,7 +13,7 @@ llama-index-llms-gemini>=0.3.0
 llama-index-embeddings-gemini>=0.2.0
 
 # Environment & Utilities
-python-dotenv>=1.0.0
+python-dotenv>=1.2.3
 
 # Testing & Quality Assurance
 pytest>=8.0.0
