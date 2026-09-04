@@ -15,6 +15,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Hyyzo Docs AI — Documentation Assistant",
   description: "Intelligent document-grounded AI Assistant built using Retrieval-Augmented Generation.",
+  icons: {
+    icon: [
+      { url: "/icon.png" },
+      { url: "/logo.png" },
+      { url: "/favicon.ico" }
+    ],
+    shortcut: "/logo.png",
+    apple: "/logo.png"
+  }
 };
 
 export default function RootLayout({

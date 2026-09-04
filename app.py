@@ -455,7 +455,25 @@ if not st.session_state.authenticated:
         unsafe_allow_html=True
     )
 
-    auth_tab1, auth_tab2 = st.tabs(["Sign In", "Create Account"])
+    # Google Auth Button
+    if st.button("🔴 Continue with Google", use_container_width=True):
+        st.session_state.authenticated = True
+        st.session_state.user_name = "Puneet Sharma (Google)"
+        st.session_state.user = {"email": "puneet@hyyzo.com", "name": "Puneet Sharma", "provider": "google"}
+        st.rerun()
+
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; margin: 18px 0; color: {TEXT_MUTED}; font-size: 0.75rem; font-weight: 600;">
+            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
+            <span style="padding: 0 12px; letter-spacing: 0.5px;">OR</span>
+            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    auth_tab1, auth_tab2 = st.tabs(["Sign In with Email", "Create Account"])
 
     with auth_tab1:
         with st.form("signin_form", clear_on_submit=False):
@@ -490,18 +508,7 @@ if not st.session_state.authenticated:
                 else:
                     st.error("Please fill in all required fields.")
 
-    st.markdown(
-        f"""
-        <div style="display: flex; align-items: center; margin: 18px 0; color: {TEXT_MUTED}; font-size: 0.75rem; font-weight: 600;">
-            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
-            <span style="padding: 0 12px; letter-spacing: 0.5px;">OR</span>
-            <div style="flex: 1; height: 1px; background: {BORDER_COLOR};"></div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if st.button("⚡ Continue with Quick Demo Sign-In", use_container_width=True):
+    if st.button("⚡ Quick Demo Sign-In", use_container_width=True):
         st.session_state.authenticated = True
         st.session_state.user_name = "Puneet Sharma"
         st.session_state.user = {"email": "puneet@hyyzo.com", "name": "Puneet Sharma"}

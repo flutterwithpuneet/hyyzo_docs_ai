@@ -460,14 +460,19 @@ export default function WorldClassAIAssistant() {
       >
         {/* Brand Header */}
         <div className="p-4 pb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-bold text-sm tracking-tight block">Hyyzo AI</span>
-              <span className={`text-[10px] block font-mono ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>Docs Assistant</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <img
+              src="/hyyzo-wordmark.png"
+              alt="HYYZO Logo"
+              className="h-6 w-auto object-contain"
+            />
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+              theme === 'dark'
+                ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
+                : 'bg-orange-50 text-orange-600 border border-orange-200'
+            }`}>
+              Docs AI
+            </span>
           </div>
 
           <button
@@ -658,17 +663,24 @@ export default function WorldClassAIAssistant() {
         }`}>
           <div className="flex items-center gap-3">
             {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className={`p-1.5 rounded-lg transition ${
-                  theme === 'dark'
-                    ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
-                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
-                }`}
-                title="Expand Sidebar"
-              >
-                <PanelLeftOpen className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
+                    theme === 'dark'
+                      ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+                  }`}
+                  title="Expand Sidebar"
+                >
+                  <PanelLeftOpen className="w-4 h-4" />
+                </button>
+                <img
+                  src="/logo.png"
+                  alt="Hyyzo Logo"
+                  className="w-6 h-6 rounded-full shadow-sm"
+                />
+              </div>
             )}
 
             {/* Model Selector Selector Dropdown Pill */}
@@ -740,8 +752,15 @@ export default function WorldClassAIAssistant() {
           {/* Empty State Welcome Layout */}
           {(!currentChat || currentChat.messages.length === 0) && (
             <div className="py-12 flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
-                <Sparkles className="w-7 h-7" />
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative group">
+                  <div className="absolute -inset-2 rounded-full bg-gradient-to-b from-orange-400/20 to-orange-600/35 blur-xl pointer-events-none" />
+                  <img
+                    src="/logo.png"
+                    alt="Hyyzo Emblem"
+                    className="w-14 h-14 rounded-full relative z-10 shadow-[0_10px_22px_-2px_rgba(249,115,22,0.45)] object-contain select-none"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2 max-w-md">
@@ -938,15 +957,19 @@ export default function WorldClassAIAssistant() {
         {/* FLOATING COMPOSER INPUT */}
         {/* --------------------------------------------------------- */}
         <div className="p-4 max-w-3xl mx-auto w-full">
-          <div className={`p-3 gemini-glass-composer transition-all duration-300 ${
+          <div className={`p-3.5 gemini-glass-composer transition-all duration-300 ${
             theme === 'dark'
               ? 'border-white/10'
-              : 'border-zinc-200 shadow-sm'
+              : 'border-zinc-200/90 bg-white shadow-lg shadow-zinc-200/60'
           }`}>
             
             {/* Attachment Chip if file selected */}
             {attachedFile && (
-              <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-medium border border-blue-500/20">
+              <div className={`mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                theme === 'dark'
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  : 'bg-blue-50 text-blue-600 border-blue-200'
+              }`}>
                 <Paperclip className="w-3 h-3" />
                 <span>{attachedFile}</span>
                 <X
@@ -968,10 +991,16 @@ export default function WorldClassAIAssistant() {
               }}
               placeholder="Ask anything about project docs, architecture, or codebase..."
               rows={2}
-              className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-zinc-400 font-normal"
+              className={`w-full bg-transparent border-none outline-none resize-none text-sm font-normal ${
+                theme === 'dark'
+                  ? 'text-zinc-100 placeholder:text-zinc-500'
+                  : 'text-zinc-900 placeholder:text-zinc-400'
+              }`}
             />
 
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-500/10">
+            <div className={`flex items-center justify-between pt-2.5 border-t ${
+              theme === 'dark' ? 'border-zinc-800/80' : 'border-zinc-100'
+            }`}>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -979,8 +1008,10 @@ export default function WorldClassAIAssistant() {
                     setAttachedFile("rewards_architecture.md");
                     showToast("Attached context file");
                   }}
-                  className={`p-1.5 rounded-lg transition ${
-                    theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
+                    theme === 'dark'
+                      ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                   }`}
                   title="Attach Context File"
                 >
@@ -993,10 +1024,12 @@ export default function WorldClassAIAssistant() {
                     setIsListening(!isListening);
                     showToast(isListening ? "Voice dictation stopped" : "Voice listening active...");
                   }}
-                  className={`p-1.5 rounded-lg transition ${
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
                     isListening
                       ? 'text-rose-500 bg-rose-500/10 animate-pulse'
-                      : theme === 'dark' ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+                      : theme === 'dark'
+                        ? 'text-zinc-400 hover:text-zinc-100 hover:bg-[#22252E]'
+                        : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                   }`}
                   title="Voice Dictation Input"
                 >
@@ -1005,16 +1038,18 @@ export default function WorldClassAIAssistant() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-mono hidden sm:inline ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                <span className={`text-[11px] font-mono hidden sm:inline ${
+                  theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
+                }`}>
                   Enter to send
                 </span>
                 <button
                   onClick={() => handleSendMessage()}
                   disabled={!input.trim() || isLoading}
-                  className={`p-2 rounded-xl text-white font-semibold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`p-2 rounded-xl text-white font-semibold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
                     theme === 'dark'
-                      ? 'bg-[#4F8CFF] hover:bg-blue-500 shadow-md'
-                      : 'bg-[#2563EB] hover:bg-blue-700 shadow-sm'
+                      ? 'bg-[#4F8CFF] hover:bg-blue-500 shadow-md shadow-blue-500/20'
+                      : 'bg-[#2563EB] hover:bg-blue-600 shadow-sm shadow-blue-500/30'
                   }`}
                 >
                   <ArrowUp className="w-4 h-4" />
@@ -1023,7 +1058,7 @@ export default function WorldClassAIAssistant() {
             </div>
           </div>
 
-          <p className={`text-[11px] text-center mt-2 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+          <p className={`text-[11px] text-center mt-2.5 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
             Hyyzo AI Assistant can make mistakes. Verify important project details.
           </p>
         </div>
