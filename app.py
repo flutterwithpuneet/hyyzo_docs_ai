@@ -7,7 +7,7 @@ import uuid
 import datetime
 import streamlit as st
 
-from src.config import DOCS_DIR
+from src.config import DOCS_DIR, get_api_key
 from src.loader import load_documents
 from src.engine import setup_models, build_index, load_index, get_query_engine
 
@@ -304,7 +304,7 @@ CUSTOM_CSS = f"""
     }}
 
     /* Suppress unnecessary Streamlit default UI chrome */
-    #MainMenu, footer, .stDeployButton, [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{
+    #MainMenu, footer, .stDeployButton, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0 !important;
@@ -316,26 +316,7 @@ CUSTOM_CSS = f"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. RAG Engine Loading
-# ---------------------------------------------------------
-@st.cache_resource(show_spinner=False)
-def initialize_query_engine():
-    setup_models()
-    index = load_index()
-    if index is None:
-        with st.spinner("Loading Hyyzo AI engine..."):
-            documents = load_documents(DOCS_DIR)
-            index = build_index(documents)
-    return get_query_engine(index)
-
-try:
-    query_engine = initialize_query_engine()
-except Exception as e:
-    st.error(f"Engine setup failed: {e}")
-    st.stop()
-
-# ---------------------------------------------------------
-# 4. Authentication Gate
+# 3. Authentication Gate
 # ---------------------------------------------------------
 if not st.session_state.authenticated:
     # Dedicated login styles to hide sidebar and center the card with 3D glassmorphism
@@ -529,6 +510,18 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ---------------------------------------------------------
+# 4. Cached Query Engine Loader
+# ---------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def get_cached_query_engine(api_key: str):
+    setup_models(api_key=api_key)
+    index = load_index()
+    if index is None:
+        documents = load_documents(DOCS_DIR)
+        index = build_index(documents)
+    return get_query_engine(index)
+
+# ---------------------------------------------------------
 # 5. Session State Management
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
@@ -587,6 +580,24 @@ with st.sidebar:
             st.session_state.user = None
             st.rerun()
 
+    # API Key Configuration
+    current_key = get_api_key()
+    with st.expander("🔑 Gemini API Key", expanded=not bool(current_key)):
+        key_input = st.text_input(
+            "API Key",
+            type="password",
+            value=st.session_state.get("user_api_key", ""),
+            placeholder="AIzaSy...",
+            help="Enter your Google Gemini API Key or set GOOGLE_API_KEY in Streamlit Cloud Secrets"
+        )
+        if key_input and key_input != st.session_state.get("user_api_key", ""):
+            st.session_state.user_api_key = key_input
+            st.cache_resource.clear()
+            st.toast("✅ Gemini API Key updated!", icon="🔑")
+            st.rerun()
+        if not current_key:
+            st.caption("⚠️ No API key found. Enter key above or configure `GOOGLE_API_KEY` in Streamlit Secrets.")
+
     # New Chat Button
     if st.button("＋ New Chat", use_container_width=True):
         new_id = str(uuid.uuid4())[:8]
@@ -631,21 +642,26 @@ with st.sidebar:
         st.rerun()
 
     if st.button("🔄 Re-index Knowledge", use_container_width=True):
-        with st.spinner("Embedding documents with Gemini AI..."):
-            try:
-                documents = load_documents(DOCS_DIR)
-                index = build_index(documents)
-                st.cache_resource.clear()
-                st.toast("✅ Knowledge base re-indexed successfully!", icon="✦")
-                st.rerun()
-            except Exception as re_err:
-                if "ResourceExhausted" in str(re_err) or "429" in str(re_err) or "Quota" in str(re_err):
-                    st.error("⏳ **Gemini Rate Limit (429)**: The API quota was temporarily reached. Please wait ~30s before re-indexing, or continue chatting using your existing cached index.")
-                else:
-                    st.error(f"Re-indexing error: {re_err}")
+        active_key = get_api_key()
+        if not active_key:
+            st.error("Please enter a Gemini API Key in the sidebar before re-indexing.")
+        else:
+            with st.spinner("Embedding documents with Gemini AI..."):
+                try:
+                    setup_models(api_key=active_key)
+                    documents = load_documents(DOCS_DIR)
+                    index = build_index(documents)
+                    st.cache_resource.clear()
+                    st.toast("✅ Knowledge base re-indexed successfully!", icon="✦")
+                    st.rerun()
+                except Exception as re_err:
+                    if "ResourceExhausted" in str(re_err) or "429" in str(re_err) or "Quota" in str(re_err):
+                        st.error("⏳ **Gemini Rate Limit (429)**: The API quota was temporarily reached. Please wait ~30s before re-indexing, or continue chatting using your existing cached index.")
+                    else:
+                        st.error(f"Re-indexing error: {re_err}")
 
 # ---------------------------------------------------------
-# 6. Hero View (Empty Chat State)
+# 7. Hero View (Empty Chat State)
 # ---------------------------------------------------------
 if not current_chat["messages"]:
     st.markdown(
@@ -657,6 +673,9 @@ if not current_chat["messages"]:
         """,
         unsafe_allow_html=True
     )
+
+    if not get_api_key():
+        st.info("💡 **Getting Started**: Please provide your Google Gemini API key in the sidebar under '🔑 Gemini API Key', or set `GOOGLE_API_KEY` in Streamlit Cloud Secrets.")
 
     prompts = [
         "Explain the Rewards Architecture in Hyyzo.",
@@ -671,7 +690,7 @@ if not current_chat["messages"]:
                 selected_prompt = pr
 
 # ---------------------------------------------------------
-# 7. Conversation Messages
+# 8. Conversation Messages
 # ---------------------------------------------------------
 for msg in current_chat["messages"]:
     if msg["role"] == "user":
@@ -688,7 +707,7 @@ for msg in current_chat["messages"]:
                 st.markdown(sources_html, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 8. Interactive Chat Composer
+# 9. Interactive Chat Composer
 # ---------------------------------------------------------
 user_input = st.chat_input("Ask a question about Hyyzo...")
 
@@ -702,32 +721,49 @@ if user_input:
     st.chat_message("user", avatar="👤").markdown(user_input)
     current_chat["messages"].append({"role": "user", "content": user_input})
 
-    with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner(""):
-            try:
-                response = query_engine.query(user_input)
-                resp_text = str(response)
-                st.markdown(resp_text)
+    active_key = get_api_key()
+    if not active_key:
+        error_msg = "⚠️ **Gemini API Key Required**: Please enter your Google Gemini API key in the sidebar under '🔑 Gemini API Key', or add `GOOGLE_API_KEY` to your Streamlit Cloud Secrets."
+        st.chat_message("assistant", avatar="🤖").markdown(error_msg)
+        current_chat["messages"].append({
+            "role": "assistant",
+            "content": error_msg,
+            "sources": []
+        })
+    else:
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Generating answer..."):
+                try:
+                    q_engine = get_cached_query_engine(active_key)
+                    response = q_engine.query(user_input)
+                    resp_text = str(response)
+                    st.markdown(resp_text)
 
-                sources = []
-                if hasattr(response, "source_nodes") and response.source_nodes:
-                    sources = [
-                        {
-                            "file": n.metadata.get("file_name", "unknown"),
-                            "score": f"{n.score:.2f}" if n.score is not None else "N/A"
-                        }
-                        for n in response.source_nodes
-                    ]
-                    st.markdown(f"<div style='margin-top: 12px; font-size: 0.78rem; color: {TEXT_MUTED}; font-weight: 500;'>DOCUMENTS REFERENCED</div>", unsafe_allow_html=True)
-                    sources_html = ""
-                    for s in sources:
-                        sources_html += f"""<span class="source-tag">📄 {s['file']} ({s['score']})</span>"""
-                    st.markdown(sources_html, unsafe_allow_html=True)
+                    sources = []
+                    if hasattr(response, "source_nodes") and response.source_nodes:
+                        sources = [
+                            {
+                                "file": n.metadata.get("file_name", "unknown"),
+                                "score": f"{n.score:.2f}" if n.score is not None else "N/A"
+                            }
+                            for n in response.source_nodes
+                        ]
+                        st.markdown(f"<div style='margin-top: 12px; font-size: 0.78rem; color: {TEXT_MUTED}; font-weight: 500;'>DOCUMENTS REFERENCED</div>", unsafe_allow_html=True)
+                        sources_html = ""
+                        for s in sources:
+                            sources_html += f"""<span class="source-tag">📄 {s['file']} ({s['score']})</span>"""
+                        st.markdown(sources_html, unsafe_allow_html=True)
 
-                current_chat["messages"].append({
-                    "role": "assistant",
-                    "content": resp_text,
-                    "sources": sources
-                })
-            except Exception as ex:
-                st.error(f"Error generating response: {ex}")
+                    current_chat["messages"].append({
+                        "role": "assistant",
+                        "content": resp_text,
+                        "sources": sources
+                    })
+                except Exception as ex:
+                    error_str = f"⚠️ Error generating response: {ex}"
+                    st.error(error_str)
+                    current_chat["messages"].append({
+                        "role": "assistant",
+                        "content": error_str,
+                        "sources": []
+                    })

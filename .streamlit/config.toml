@@ -13,7 +13,7 @@ enableXsrfProtection = false
 
 [client]
 toolbarMode = "minimal"
-showErrorDetails = false
+showErrorDetails = true
 
 [browser]
 gatherUsageStats = false

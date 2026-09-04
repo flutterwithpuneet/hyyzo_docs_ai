@@ -9,16 +9,20 @@ from llama_index.core import Settings
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 
-from src.config import GOOGLE_API_KEY, LLM_MODEL, EMBEDDING_MODEL, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP
+from src.config import get_api_key, LLM_MODEL, EMBEDDING_MODEL, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
 
 import time
 
-def setup_models():
+def setup_models(api_key: str = None):
     """Configure Gemini LLM and embedding model globally."""
-    Settings.llm = Gemini(api_key=GOOGLE_API_KEY, model=LLM_MODEL)
+    effective_key = api_key or get_api_key()
+    if not effective_key:
+        raise ValueError("Google Gemini API Key is required. Please set GOOGLE_API_KEY in environment or Streamlit secrets.")
+    
+    Settings.llm = Gemini(api_key=effective_key, model=LLM_MODEL)
     Settings.embed_model = GeminiEmbedding(
-        api_key=GOOGLE_API_KEY,
+        api_key=effective_key,
         model_name=EMBEDDING_MODEL,
         embed_batch_size=5
     )
@@ -27,13 +31,14 @@ def setup_models():
     print(f"[OK] Models configured: LLM={LLM_MODEL}, Embed={EMBEDDING_MODEL}")
 
 
-def set_active_llm(model_name: str):
+def set_active_llm(model_name: str, api_key: str = None):
     """Update active LLM model dynamically."""
     if not model_name:
         return
+    effective_key = api_key or get_api_key()
     # Ensure correct Gemini prefix if needed (e.g. models/gemini-2.0-flash)
     formatted_name = model_name if model_name.startswith("models/") else f"models/{model_name}"
-    Settings.llm = Gemini(api_key=GOOGLE_API_KEY, model=formatted_name)
+    Settings.llm = Gemini(api_key=effective_key, model=formatted_name)
     print(f"[OK] LLM updated to: {formatted_name}")
 
 
